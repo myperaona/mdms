@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.DataSourceMapper">
+
+    <select id="findById" resultType="com.antigravity.mdms.model.DataSource">
+        SELECT * FROM data_source WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findAll" resultType="com.antigravity.mdms.model.DataSource">
+        SELECT * FROM data_source ORDER BY name ASC
+    </select>
+
+    <insert id="insert" parameterType="com.antigravity.mdms.model.DataSource">
+        INSERT INTO data_source (id, name, db_type, host, port, database_name, username, password_encrypted, status, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{name}, #{dbType}, #{host}, #{port}, #{databaseName}, #{username}, #{passwordEncrypted}, #{status}, COALESCE(#{createdAt}, CURRENT_TIMESTAMP))
+    </insert>
+
+    <update id="update" parameterType="com.antigravity.mdms.model.DataSource">
+        UPDATE data_source
+        SET name = #{name},
+            db_type = #{dbType},
+            host = #{host},
+            port = #{port},
+            database_name = #{databaseName},
+            username = #{username},
+            password_encrypted = #{passwordEncrypted},
+            status = #{status}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE data_source
+        SET status = #{status}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM data_source WHERE id = #{id, jdbcType=OTHER}
+    </delete>
+
+</mapper>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.StandardizationMapper">
+
+    <!-- === Domain CRUD === -->
+    <select id="findAllDomains" resultType="com.antigravity.mdms.model.Domain">
+        SELECT * FROM domain ORDER BY name ASC
+    </select>
+
+    <select id="findDomainById" resultType="com.antigravity.mdms.model.Domain">
+        SELECT * FROM domain WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findDomainByName" resultType="com.antigravity.mdms.model.Domain">
+        SELECT * FROM domain WHERE name = #{name}
+    </select>
+
+    <insert id="insertDomain" parameterType="com.antigravity.mdms.model.Domain">
+        INSERT INTO domain (id, tenant_id, name, data_type, length, precision_val, format_pattern, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{name}, #{dataType}, #{length}, #{precisionVal}, #{formatPattern}, #{description}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateDomain" parameterType="com.antigravity.mdms.model.Domain">
+        UPDATE domain
+        SET name = #{name},
+            data_type = #{dataType},
+            length = #{length},
+            precision_val = #{precisionVal},
+            format_pattern = #{formatPattern},
+            description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteDomain">
+        DELETE FROM domain WHERE id = #{id, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Forbidden Word CRUD === -->
+    <select id="findAllForbiddenWords" resultType="com.antigravity.mdms.model.ForbiddenWord">
+        SELECT * FROM forbidden_word ORDER BY word ASC
+    </select>
+
+    <select id="findForbiddenWordById" resultType="com.antigravity.mdms.model.ForbiddenWord">
+        SELECT * FROM forbidden_word WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findForbiddenWordByWord" resultType="com.antigravity.mdms.model.ForbiddenWord">
+        SELECT * FROM forbidden_word WHERE word = #{word}
+    </select>
+
+    <insert id="insertForbiddenWord" parameterType="com.antigravity.mdms.model.ForbiddenWord">
+        INSERT INTO forbidden_word (id, tenant_id, word, replacement, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{word}, #{replacement}, #{description}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateForbiddenWord" parameterType="com.antigravity.mdms.model.ForbiddenWord">
+        UPDATE forbidden_word
+        SET word = #{word},
+            replacement = #{replacement},
+            description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteForbiddenWord">
+        DELETE FROM forbidden_word WHERE id = #{id, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Standard Word CRUD === -->
+    <select id="findAllStandardWords" resultType="com.antigravity.mdms.model.StandardWord">
+        SELECT w.*, d.name AS domainName 
+        FROM standard_word w 
+        LEFT JOIN domain d ON w.domain_id = d.id 
+        ORDER BY w.logical_name ASC
+    </select>
+
+    <select id="findStandardWordById" resultType="com.antigravity.mdms.model.StandardWord">
+        SELECT w.*, d.name AS domainName 
+        FROM standard_word w 
+        LEFT JOIN domain d ON w.domain_id = d.id 
+        WHERE w.id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findStandardWordByLogicalName" resultType="com.antigravity.mdms.model.StandardWord">
+        SELECT * FROM standard_word WHERE logical_name = #{logicalName}
+    </select>
+
+    <select id="findStandardWordByPhysicalName" resultType="com.antigravity.mdms.model.StandardWord">
+        SELECT * FROM standard_word WHERE physical_name = #{physicalName}
+    </select>
+
+    <insert id="insertStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
+        INSERT INTO standard_word (id, tenant_id, logical_name, physical_name, domain_id, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{domainId, jdbcType=OTHER}, #{description}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
+        UPDATE standard_word
+        SET logical_name = #{logicalName},
+            physical_name = #{physicalName},
+            domain_id = #{domainId, jdbcType=OTHER},
+            description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteStandardWord">
+        DELETE FROM standard_word WHERE id = #{id, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Standard Term CRUD === -->
+    <select id="findAllStandardTerms" resultType="com.antigravity.mdms.model.StandardTerm">
+        SELECT * FROM standard_term ORDER BY logical_name ASC
+    </select>
+
+    <select id="findStandardTermById" resultType="com.antigravity.mdms.model.StandardTerm">
+        SELECT * FROM standard_term WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findStandardTermByLogicalName" resultType="com.antigravity.mdms.model.StandardTerm">
+        SELECT * FROM standard_term WHERE logical_name = #{logicalName}
+    </select>
+
+    <select id="findStandardTermByPhysicalName" resultType="com.antigravity.mdms.model.StandardTerm">
+        SELECT * FROM standard_term WHERE physical_name = #{physicalName}
+    </select>
+
+    <insert id="insertStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
+        INSERT INTO standard_term (id, tenant_id, logical_name, physical_name, description, word_ids, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{description}, #{wordIds}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
+        UPDATE standard_term
+        SET logical_name = #{logicalName},
+            physical_name = #{physicalName},
+            description = #{description},
+            word_ids = #{wordIds}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteStandardTerm">
+        DELETE FROM standard_term WHERE id = #{id, jdbcType=OTHER}
+    </delete>
+
+    <select id="countTotalColumns" resultType="int">
+        SELECT count(*) FROM metadata_column
+    </select>
+
+    <select id="countCompliantColumns" resultType="int">
+        SELECT count(*) FROM metadata_column 
+        WHERE UPPER(name) IN (SELECT UPPER(physical_name) FROM standard_term)
+    </select>
+
+</mapper>

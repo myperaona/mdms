@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.UserMapper">
+
+    <select id="findByUsername" resultType="com.antigravity.mdms.model.AppUser">
+        SELECT * FROM public.app_user WHERE username = #{username}
+    </select>
+
+    <select id="findByEmail" resultType="com.antigravity.mdms.model.AppUser">
+        SELECT * FROM public.app_user WHERE email = #{email}
+    </select>
+
+    <insert id="insert" parameterType="com.antigravity.mdms.model.AppUser">
+        INSERT INTO public.app_user (id, tenant_id, username, password_hash, email, mfa_secret, mfa_enabled, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{username}, #{passwordHash}, #{email}, #{mfaSecret}, #{mfaEnabled}, COALESCE(#{createdAt}, CURRENT_TIMESTAMP))
+    </insert>
+
+    <update id="updateMfaSecret">
+        UPDATE public.app_user
+        SET mfa_secret = #{mfaSecret}, mfa_enabled = #{mfaEnabled}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+</mapper>

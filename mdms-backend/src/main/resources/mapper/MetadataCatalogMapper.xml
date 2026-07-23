@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.MetadataCatalogMapper">
+
+    <!-- Schema Operations -->
+    <select id="findSchemaById" resultType="com.antigravity.mdms.model.MetadataSchema">
+        SELECT * FROM metadata_schema WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findSchemaByName" resultType="com.antigravity.mdms.model.MetadataSchema">
+        SELECT * FROM metadata_schema WHERE data_source_id = #{dataSourceId, jdbcType=OTHER} AND name = #{name}
+    </select>
+
+    <select id="findSchemasByDataSourceId" resultType="com.antigravity.mdms.model.MetadataSchema">
+        SELECT * FROM metadata_schema WHERE data_source_id = #{dataSourceId, jdbcType=OTHER} ORDER BY name ASC
+    </select>
+
+    <insert id="insertSchema" parameterType="com.antigravity.mdms.model.MetadataSchema">
+        INSERT INTO metadata_schema (id, data_source_id, name, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{dataSourceId, jdbcType=OTHER}, #{name}, #{description}, COALESCE(#{createdAt}, CURRENT_TIMESTAMP))
+    </insert>
+
+    <delete id="deleteSchemasByDataSourceId">
+        DELETE FROM metadata_schema WHERE data_source_id = #{dataSourceId, jdbcType=OTHER}
+    </delete>
+
+    <!-- Table Operations -->
+    <select id="findTableById" resultType="com.antigravity.mdms.model.MetadataTable">
+        SELECT * FROM metadata_table WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findTableByName" resultType="com.antigravity.mdms.model.MetadataTable">
+        SELECT * FROM metadata_table WHERE schema_id = #{schemaId, jdbcType=OTHER} AND name = #{name}
+    </select>
+
+    <select id="findTablesBySchemaId" resultType="com.antigravity.mdms.model.MetadataTable">
+        SELECT * FROM metadata_table WHERE schema_id = #{schemaId, jdbcType=OTHER} ORDER BY name ASC
+    </select>
+
+    <insert id="insertTable" parameterType="com.antigravity.mdms.model.MetadataTable">
+        INSERT INTO metadata_table (id, schema_id, name, description, row_count_estimate, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{schemaId, jdbcType=OTHER}, #{name}, #{description}, #{rowCountEstimate}, COALESCE(#{createdAt}, CURRENT_TIMESTAMP))
+    </insert>
+
+    <update id="updateTableDescription">
+        UPDATE metadata_table
+        SET description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <!-- Column Operations -->
+    <select id="findColumnById" resultType="com.antigravity.mdms.model.MetadataColumn">
+        SELECT * FROM metadata_column WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findColumnsByTableId" resultType="com.antigravity.mdms.model.MetadataColumn">
+        SELECT * FROM metadata_column WHERE table_id = #{tableId, jdbcType=OTHER} ORDER BY name ASC
+    </select>
+
+    <insert id="insertColumn" parameterType="com.antigravity.mdms.model.MetadataColumn">
+        INSERT INTO metadata_column (id, table_id, name, data_type, is_nullable, is_primary_key, is_foreign_key, referenced_table, referenced_column, description, created_at)
+        VALUES (
+            COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), 
+            #{tableId, jdbcType=OTHER}, 
+            #{name}, 
+            #{dataType}, 
+            #{nullable}, 
+            #{primaryKey}, 
+            #{foreignKey}, 
+            #{referencedTable}, 
+            #{referencedColumn}, 
+            #{description}, 
+            COALESCE(#{createdAt}, CURRENT_TIMESTAMP)
+        )
+    </insert>
+
+    <update id="updateColumnDescription">
+        UPDATE metadata_column
+        SET description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <update id="updateColumn" parameterType="com.antigravity.mdms.model.MetadataColumn">
+        UPDATE metadata_column
+        SET name = #{name},
+            data_type = #{dataType},
+            description = #{description}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <!-- Global Search -->
+    <select id="searchTables" resultType="com.antigravity.mdms.model.MetadataTable">
+        SELECT t.* FROM metadata_table t
+        LEFT JOIN metadata_schema s ON t.schema_id = s.id
+        WHERE t.name ILIKE CONCAT('%', #{query}, '%')
+           OR t.description ILIKE CONCAT('%', #{query}, '%')
+           OR s.name ILIKE CONCAT('%', #{query}, '%')
+        ORDER BY t.name ASC
+        LIMIT 50
+    </select>
+
+    <!-- Ingestion Job Operations -->
+    <select id="findJobById" resultType="com.antigravity.mdms.model.IngestionJob">
+        SELECT * FROM ingestion_job WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findJobsByDataSourceId" resultType="com.antigravity.mdms.model.IngestionJob">
+        SELECT * FROM ingestion_job WHERE data_source_id = #{dataSourceId, jdbcType=OTHER} ORDER BY started_at DESC
+    </select>
+
+    <insert id="insertJob" parameterType="com.antigravity.mdms.model.IngestionJob">
+        INSERT INTO ingestion_job (id, data_source_id, status, started_at, ended_at, log_message)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{dataSourceId, jdbcType=OTHER}, #{status}, #{startedAt}, #{endedAt}, #{logMessage})
+    </insert>
+
+    <update id="updateJob" parameterType="com.antigravity.mdms.model.IngestionJob">
+        UPDATE ingestion_job
+        SET status = #{status},
+            started_at = #{startedAt},
+            ended_at = #{endedAt},
+            log_message = #{logMessage}
+        WHERE id = #{id, jdbcType=OTHER}
+    </update>
+
+    <!-- Lineage Operations -->
+    <select id="findUpstreamRelations" resultType="map">
+        SELECT 
+            c.referenced_table AS source_table,
+            c.referenced_column AS source_column,
+            t.name AS target_table,
+            c.name AS target_column
+        FROM metadata_column c
+        JOIN metadata_table t ON c.table_id = t.id
+        WHERE t.id = #{tableId, jdbcType=OTHER}
+          AND c.is_foreign_key = true
+    </select>
+
+    <select id="findDownstreamRelations" resultType="map">
+        SELECT 
+            parent_table.name AS source_table,
+            c.referenced_column AS source_column,
+            child_table.name AS target_table,
+            c.name AS target_column
+        FROM metadata_column c
+        JOIN metadata_table child_table ON c.table_id = child_table.id
+        JOIN metadata_table parent_table ON child_table.schema_id = parent_table.schema_id
+        WHERE c.is_foreign_key = true 
+          AND c.referenced_table = parent_table.name
+          AND parent_table.id = #{tableId, jdbcType=OTHER}
+    </select>
+
+</mapper>

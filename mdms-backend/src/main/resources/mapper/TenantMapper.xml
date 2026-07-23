@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.TenantMapper">
+
+    <select id="findAll" resultType="com.antigravity.mdms.model.Tenant">
+        SELECT * FROM public.tenant
+    </select>
+
+    <select id="findById" resultType="com.antigravity.mdms.model.Tenant">
+        SELECT * FROM public.tenant WHERE id = #{id, jdbcType=OTHER}
+    </select>
+
+    <select id="findByName" resultType="com.antigravity.mdms.model.Tenant">
+        SELECT * FROM public.tenant WHERE name = #{name}
+    </select>
+
+    <select id="findBySchemaName" resultType="com.antigravity.mdms.model.Tenant">
+        SELECT * FROM public.tenant WHERE schema_name = #{schemaName}
+    </select>
+
+    <insert id="insert" parameterType="com.antigravity.mdms.model.Tenant">
+        INSERT INTO public.tenant (id, name, schema_name, status, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{name}, #{schemaName}, #{status}, COALESCE(#{createdAt}, CURRENT_TIMESTAMP))
+    </insert>
+
+    <update id="createSchema">
+        CREATE SCHEMA IF NOT EXISTS ${schemaName}
+    </update>
+
+    <update id="createDataSourceTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.data_source (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name VARCHAR(100) NOT NULL,
+            db_type VARCHAR(20) NOT NULL,
+            host VARCHAR(255) NOT NULL,
+            port INTEGER NOT NULL,
+            database_name VARCHAR(100) NOT NULL,
+            username VARCHAR(100) NOT NULL,
+            password_encrypted VARCHAR(255) NOT NULL,
+            status VARCHAR(20) DEFAULT 'DISCONNECTED',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createMetadataSchemaTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.metadata_schema (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            data_source_id UUID REFERENCES ${schemaName}.data_source(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createMetadataTableTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.metadata_table (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            schema_id UUID REFERENCES ${schemaName}.metadata_schema(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            row_count_estimate BIGINT DEFAULT 0,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createMetadataColumnTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.metadata_column (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            table_id UUID REFERENCES ${schemaName}.metadata_table(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            data_type VARCHAR(50) NOT NULL,
+            is_nullable BOOLEAN DEFAULT TRUE,
+            is_primary_key BOOLEAN DEFAULT FALSE,
+            is_foreign_key BOOLEAN DEFAULT FALSE,
+            referenced_table VARCHAR(100),
+            referenced_column VARCHAR(100),
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createIngestionJobTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.ingestion_job (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            data_source_id UUID REFERENCES ${schemaName}.data_source(id) ON DELETE CASCADE,
+            status VARCHAR(20) NOT NULL,
+            started_at TIMESTAMP WITH TIME ZONE,
+            ended_at TIMESTAMP WITH TIME ZONE,
+            log_message TEXT
+        )
+    </update>
+
+    <update id="createDomainTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.domain (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL UNIQUE,
+            data_type VARCHAR(50) NOT NULL,
+            length INTEGER,
+            precision_val INTEGER,
+            format_pattern VARCHAR(100),
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createForbiddenWordTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.forbidden_word (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            word VARCHAR(100) NOT NULL UNIQUE,
+            replacement VARCHAR(100),
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createStandardWordTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.standard_word (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            logical_name VARCHAR(100) NOT NULL UNIQUE,
+            physical_name VARCHAR(100) NOT NULL UNIQUE,
+            domain_id UUID NOT NULL REFERENCES ${schemaName}.domain(id) ON DELETE RESTRICT,
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+    <update id="createStandardTermTable">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.standard_term (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            logical_name VARCHAR(150) NOT NULL UNIQUE,
+            physical_name VARCHAR(150) NOT NULL UNIQUE,
+            description TEXT,
+            word_ids TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+    </update>
+
+</mapper>

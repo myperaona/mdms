@@ -1,0 +1,27 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Backend (Java/Maven)
+mdms-backend/target/
+mdms-backend/.classpath
+mdms-backend/.project
+mdms-backend/.settings/
+mdms-backend/bin/
+
+# Frontend (Node/React/Vue 등)
+mdms-frontend/node_modules/
+mdms-frontend/dist/
+mdms-frontend/build/
+mdms-frontend/.env
+mdms-frontend/.env.local
+mdms-frontend/npm-debug.log*
+mdms-frontend/yarn-debug.log*
+mdms-frontend/yarn-error.log*
