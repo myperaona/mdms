@@ -17,6 +17,8 @@ public interface StandardizationMapper {
     List<Domain> findAllDomains();
     Domain findDomainById(@Param("id") UUID id);
     Domain findDomainByName(@Param("name") String name);
+    Domain findDomainByHierarchicalKey(@Param("domainGroup") String domainGroup, @Param("domainClassification") String domainClassification, @Param("name") String name);
+    Domain findFirstDomainByClassification(@Param("domainClassification") String domainClassification);
     void insertDomain(Domain domain);
     void updateDomain(Domain domain);
     void deleteDomain(@Param("id") UUID id);

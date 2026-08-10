@@ -23,19 +23,21 @@ public class IngestionService {
     private static final Logger log = LoggerFactory.getLogger(IngestionService.class);
 
     private final DataSourceMapper dataSourceMapper;
-    private final MetadataCatalogMapper catalogMapper;
     private final EncryptionUtil encryptionUtil;
+    private final MetadataPersistenceService persistenceService;
 
-    public IngestionService(DataSourceMapper dataSourceMapper, MetadataCatalogMapper catalogMapper, EncryptionUtil encryptionUtil) {
+    public IngestionService(DataSourceMapper dataSourceMapper, EncryptionUtil encryptionUtil, 
+                            MetadataPersistenceService persistenceService) {
         this.dataSourceMapper = dataSourceMapper;
-        this.catalogMapper = catalogMapper;
         this.encryptionUtil = encryptionUtil;
+        this.persistenceService = persistenceService;
     }
 
     @Async
-    public void runIngestionAsync(UUID dataSourceId, String tenantSchemaName) {
+    public void runIngestionAsync(UUID dataSourceId, String tenantSchemaName, String tenantId) {
         // Set tenant context for this background thread
         TenantContext.setCurrentTenantSchema(tenantSchemaName);
+        TenantContext.setCurrentTenantId(tenantId);
         try {
             runIngestionSync(dataSourceId);
         } finally {
@@ -43,7 +45,6 @@ public class IngestionService {
         }
     }
 
-    @Transactional
     public void runIngestionSync(UUID dataSourceId) {
         DataSource ds = dataSourceMapper.findById(dataSourceId);
         if (ds == null) {
@@ -55,7 +56,7 @@ public class IngestionService {
         job.setDataSourceId(dataSourceId);
         job.setStatus("RUNNING");
         job.setStartedAt(OffsetDateTime.now());
-        catalogMapper.insertJob(job);
+        persistenceService.saveInitialJob(job);
 
         String decryptedPassword = encryptionUtil.decrypt(ds.getPasswordEncrypted());
         String url;
@@ -77,7 +78,7 @@ public class IngestionService {
             url = String.format("jdbc:tibero:thin:@%s:%d:%s", ds.getHost(), ds.getPort(), ds.getDatabaseName());
             driverClass = "com.tmax.tibero.jdbc.TbDriver";
         } else {
-            updateJobStatus(job, "FAILED", "Unsupported database type: " + ds.getDbType());
+            persistenceService.updateJobStatus(job, "FAILED", "Unsupported database type: " + ds.getDbType(), dataSourceId, "ERROR");
             return;
         }
 
@@ -92,8 +93,9 @@ public class IngestionService {
         try (Connection conn = DriverManager.getConnection(url, ds.getUsername(), decryptedPassword)) {
             DatabaseMetaData metaData = conn.getMetaData();
             
-            // Delete previous metadata catalog for this source to perform a clean refresh
-            catalogMapper.deleteSchemasByDataSourceId(dataSourceId);
+            List<MetadataSchema> schemas = new ArrayList<>();
+            List<MetadataTable> tables = new ArrayList<>();
+            List<MetadataColumn> columns = new ArrayList<>();
 
             // Ingest schemas
             String catalog = conn.getCatalog();
@@ -119,7 +121,7 @@ public class IngestionService {
                 schemaEntity.setDataSourceId(dataSourceId);
                 schemaEntity.setName(sName);
                 schemaEntity.setDescription("Ingested schema: " + sName);
-                catalogMapper.insertSchema(schemaEntity);
+                schemas.add(schemaEntity);
 
                 // Fetch tables inside the schema
                 String schemaPattern = "MYSQL".equalsIgnoreCase(ds.getDbType()) ? null : sName;
@@ -132,7 +134,7 @@ public class IngestionService {
                         tableEntity.setName(tName);
                         tableEntity.setDescription("");
                         tableEntity.setRowCountEstimate(0L);
-                        catalogMapper.insertTable(tableEntity);
+                        tables.add(tableEntity);
 
                         // Fetch Primary Keys
                         Set<String> primaryKeys = new HashSet<>();
@@ -175,19 +177,20 @@ public class IngestionService {
                                     colEntity.setReferencedColumn(fkDetails[1]);
                                 }
                                 colEntity.setDescription("");
-                                catalogMapper.insertColumn(colEntity);
+                                columns.add(colEntity);
                             }
                         }
                     }
                 }
             }
 
-            updateJobStatus(job, "SUCCESS", "Metadata ingestion completed successfully.");
-            dataSourceMapper.updateStatus(dataSourceId, "CONNECTED");
+            // Save all gathered metadata to local database in a single fast transaction
+            persistenceService.saveIngestedMetadata(dataSourceId, schemas, tables, columns, job, 
+                "SUCCESS", "Metadata ingestion completed successfully.", "CONNECTED");
+
         } catch (Exception e) {
             log.error("Ingestion failed", e);
-            updateJobStatus(job, "FAILED", e.getMessage());
-            dataSourceMapper.updateStatus(dataSourceId, "ERROR");
+            persistenceService.updateJobStatus(job, "FAILED", e.getMessage(), dataSourceId, "ERROR");
         }
     }
 
@@ -197,12 +200,5 @@ public class IngestionService {
         return s.startsWith("pg_") || s.equals("information_schema") || s.equals("sys") || s.equals("db") || s.equals("mysql") 
             || s.equals("performance_schema") || s.equals("system") || s.equals("outln") || s.equals("db_owner") 
             || s.startsWith("db_") || s.equals("guest") || s.equals("syscat") || s.equals("sysgif");
-    }
-
-    private void updateJobStatus(IngestionJob job, String status, String message) {
-        job.setStatus(status);
-        job.setEndedAt(OffsetDateTime.now());
-        job.setLogMessage(message);
-        catalogMapper.updateJob(job);
     }
 }

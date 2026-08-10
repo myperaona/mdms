@@ -13,11 +13,16 @@ import {
 
 interface Domain {
   id?: string;
+  domainGroup: string;
+  domainClassification: string;
   name: string;
-  dataType: string;
-  length?: number;
-  precisionVal?: number;
-  formatPattern?: string;
+  dataType?: string;
+  dataLength?: number;
+  decimalLength?: number;
+  storageFormat?: string;
+  expressionFormat?: string;
+  unit?: string;
+  allowedValues?: string;
   description?: string;
 }
 
@@ -25,6 +30,7 @@ interface ForbiddenWord {
   id?: string;
   word: string;
   replacement?: string;
+  isUsed?: boolean;
   description?: string;
 }
 
@@ -32,8 +38,12 @@ interface StandardWord {
   id?: string;
   logicalName: string;
   physicalName: string;
+  englishName?: string;
   domainId: string;
   domainName?: string;
+  isFormatWord?: boolean;
+  synonyms?: string;
+  forbiddenWords?: string;
   description?: string;
 }
 
@@ -43,6 +53,11 @@ interface StandardTerm {
   physicalName: string;
   description?: string;
   wordIds?: string;
+  commonDomainName?: string;
+  allowedValues?: string;
+  storageFormat?: string;
+  expressionFormat?: string;
+  adminCodeName?: string;
 }
 
 interface ImportReport {
@@ -77,11 +92,46 @@ export default function StandardizationManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [wordSelectorSearch, setWordSelectorSearch] = useState('');
+
   // Form inputs
-  const [domainForm, setDomainForm] = useState<Domain>({ name: '', dataType: 'VARCHAR', length: 100, precisionVal: 0, formatPattern: '', description: '' });
-  const [forbiddenForm, setForbiddenForm] = useState<ForbiddenWord>({ word: '', replacement: '', description: '' });
-  const [wordForm, setWordForm] = useState<StandardWord>({ logicalName: '', physicalName: '', domainId: '', description: '' });
-  const [termForm, setTermForm] = useState<StandardTerm>({ logicalName: '', physicalName: '', description: '', wordIds: '' });
+  const [domainForm, setDomainForm] = useState<Domain>({
+    domainGroup: '',
+    domainClassification: '',
+    name: '',
+    dataType: 'VARCHAR',
+    dataLength: 100,
+    decimalLength: 0,
+    storageFormat: '',
+    expressionFormat: '',
+    unit: '',
+    allowedValues: '',
+    description: ''
+  });
+  const [forbiddenForm, setForbiddenForm] = useState<ForbiddenWord>({ word: '', replacement: '', isUsed: true, description: '' });
+  const [wordForm, setWordForm] = useState<StandardWord>({
+    logicalName: '',
+    physicalName: '',
+    englishName: '',
+    domainId: '',
+    isFormatWord: false,
+    synonyms: '',
+    forbiddenWords: '',
+    description: ''
+  });
+  const [termForm, setTermForm] = useState<StandardTerm>({
+    logicalName: '',
+    physicalName: '',
+    description: '',
+    wordIds: '',
+    commonDomainName: '',
+    allowedValues: '',
+    storageFormat: '',
+    expressionFormat: '',
+    adminCodeName: ''
+  });
 
   // Wizard state for Terms
   const [selectedWordIds, setSelectedWordIds] = useState<string[]>([]);
@@ -89,6 +139,13 @@ export default function StandardizationManagement() {
   // CSV Import state
   const [importType, setImportType] = useState<'domains' | 'forbidden-words' | 'words' | 'terms'>('domains');
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
+
+  // Pagination states
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [domainPage, setDomainPage] = useState<number>(1);
+  const [forbiddenPage, setForbiddenPage] = useState<number>(1);
+  const [wordPage, setWordPage] = useState<number>(1);
+  const [termPage, setTermPage] = useState<number>(1);
 
   // Compliance report state
   const [complianceReport, setComplianceReport] = useState<ComplianceReport | null>(null);
@@ -142,7 +199,11 @@ export default function StandardizationManagement() {
         await request('/standardization/forbidden-words', { method: 'POST', body: JSON.stringify(payload) });
         setSuccessMsg(locale === 'ko' ? '금칙어가 성공적으로 저장되었습니다.' : 'Forbidden word saved successfully.');
       } else if (activeTab === 'words') {
-        const payload = { ...wordForm, id: editingId || undefined };
+        const payload = { 
+          ...wordForm, 
+          id: editingId || undefined,
+          domainId: wordForm.domainId || undefined
+        };
         await request('/standardization/words', { method: 'POST', body: JSON.stringify(payload) });
         setSuccessMsg(locale === 'ko' ? '표준단어가 성공적으로 저장되었습니다.' : 'Standard word saved successfully.');
       } else if (activeTab === 'terms') {
@@ -180,33 +241,102 @@ export default function StandardizationManagement() {
 
   const resetForms = () => {
     setEditingId(null);
-    setDomainForm({ name: '', dataType: 'VARCHAR', length: 100, precisionVal: 0, formatPattern: '', description: '' });
-    setForbiddenForm({ word: '', replacement: '', description: '' });
-    setWordForm({ logicalName: '', physicalName: '', domainId: '', description: '' });
-    setTermForm({ logicalName: '', physicalName: '', description: '', wordIds: '' });
+    setDomainForm({
+      domainGroup: '',
+      domainClassification: '',
+      name: '',
+      dataType: 'VARCHAR',
+      dataLength: 100,
+      decimalLength: 0,
+      storageFormat: '',
+      expressionFormat: '',
+      unit: '',
+      allowedValues: '',
+      description: ''
+    });
+    setForbiddenForm({ word: '', replacement: '', isUsed: true, description: '' });
+    setWordForm({
+      logicalName: '',
+      physicalName: '',
+      englishName: '',
+      domainId: '',
+      isFormatWord: false,
+      synonyms: '',
+      forbiddenWords: '',
+      description: ''
+    });
+    setTermForm({
+      logicalName: '',
+      physicalName: '',
+      description: '',
+      wordIds: '',
+      commonDomainName: '',
+      allowedValues: '',
+      storageFormat: '',
+      expressionFormat: '',
+      adminCodeName: ''
+    });
     setSelectedWordIds([]);
+    setSearchQuery('');
+    setWordSelectorSearch('');
   };
 
   const startEditDomain = (d: Domain) => {
-    setDomainForm({ ...d });
+    setDomainForm({
+      domainGroup: d.domainGroup || '',
+      domainClassification: d.domainClassification || '',
+      name: d.name,
+      dataType: d.dataType || 'VARCHAR',
+      dataLength: d.dataLength !== undefined ? d.dataLength : 100,
+      decimalLength: d.decimalLength !== undefined ? d.decimalLength : 0,
+      storageFormat: d.storageFormat || '',
+      expressionFormat: d.expressionFormat || '',
+      unit: d.unit || '',
+      allowedValues: d.allowedValues || '',
+      description: d.description || ''
+    });
     setEditingId(d.id || null);
     setShowForm(true);
   };
 
   const startEditForbidden = (fw: ForbiddenWord) => {
-    setForbiddenForm({ ...fw });
+    setForbiddenForm({
+      word: fw.word,
+      replacement: fw.replacement || '',
+      isUsed: fw.isUsed !== false,
+      description: fw.description || ''
+    });
     setEditingId(fw.id || null);
     setShowForm(true);
   };
 
   const startEditWord = (w: StandardWord) => {
-    setWordForm({ ...w });
+    setWordForm({
+      logicalName: w.logicalName,
+      physicalName: w.physicalName,
+      englishName: w.englishName || '',
+      domainId: w.domainId || '',
+      isFormatWord: !!w.isFormatWord,
+      synonyms: w.synonyms || '',
+      forbiddenWords: w.forbiddenWords || '',
+      description: w.description || ''
+    });
     setEditingId(w.id || null);
     setShowForm(true);
   };
 
   const startEditTerm = (t: StandardTerm) => {
-    setTermForm({ ...t });
+    setTermForm({
+      logicalName: t.logicalName,
+      physicalName: t.physicalName,
+      description: t.description || '',
+      wordIds: t.wordIds || '',
+      commonDomainName: t.commonDomainName || '',
+      allowedValues: t.allowedValues || '',
+      storageFormat: t.storageFormat || '',
+      expressionFormat: t.expressionFormat || '',
+      adminCodeName: t.adminCodeName || ''
+    });
     setEditingId(t.id || null);
     setSelectedWordIds(t.wordIds ? t.wordIds.split(',') : []);
     setShowForm(true);
@@ -223,7 +353,7 @@ export default function StandardizationManagement() {
     setSelectedWordIds(updatedWordIds);
 
     if (updatedWordIds.length === 0) {
-      setTermForm(prev => ({ ...prev, logicalName: '', physicalName: '', wordIds: '' }));
+      setTermForm(prev => ({ ...prev, logicalName: '', physicalName: '', wordIds: '', storageFormat: '' }));
       return;
     }
 
@@ -236,7 +366,8 @@ export default function StandardizationManagement() {
         ...prev,
         logicalName: res.logicalName,
         physicalName: res.physicalName,
-        wordIds: updatedWordIds.join(',')
+        wordIds: updatedWordIds.join(','),
+        storageFormat: res.dataType
       }));
     } catch (e: any) {
       setErrorMsg(locale === 'ko' ? `조합 오류: ${e.message}` : `Assembly error: ${e.message}`);
@@ -309,6 +440,162 @@ export default function StandardizationManagement() {
       .catch(err => alert(locale === 'ko' ? `반출 실패: ${err.message}` : `Export failed: ${err.message}`));
   };
 
+  // Client-side filtering for Search
+  const filteredDomains = domains.filter(d => 
+    d.domainGroup.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    d.domainClassification.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (d.storageFormat && d.storageFormat.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (d.expressionFormat && d.expressionFormat.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (d.unit && d.unit.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (d.allowedValues && d.allowedValues.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (d.description && d.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredForbidden = forbiddenWords.filter(fw => 
+    fw.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (fw.replacement && fw.replacement.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (fw.description && fw.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredWords = words.filter(w => 
+    w.logicalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    w.physicalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (w.domainName && w.domainName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (w.synonyms && w.synonyms.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (w.forbiddenWords && w.forbiddenWords.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (w.description && w.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredTerms = terms.filter(t => 
+    t.logicalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.physicalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (t.commonDomainName && t.commonDomainName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (t.allowedValues && t.allowedValues.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (t.storageFormat && t.storageFormat.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (t.expressionFormat && t.expressionFormat.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (t.adminCodeName && t.adminCodeName.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredSelectorWords = words.filter(w =>
+    w.logicalName.toLowerCase().includes(wordSelectorSearch.toLowerCase()) ||
+    w.physicalName.toLowerCase().includes(wordSelectorSearch.toLowerCase())
+  );
+
+  // Pagination calculation
+  const totalDomainPages = Math.ceil(filteredDomains.length / pageSize);
+  const totalForbiddenPages = Math.ceil(filteredForbidden.length / pageSize);
+  const totalWordPages = Math.ceil(filteredWords.length / pageSize);
+  const totalTermPages = Math.ceil(filteredTerms.length / pageSize);
+
+  const activeDomainPage = Math.max(1, Math.min(domainPage, totalDomainPages));
+  const activeForbiddenPage = Math.max(1, Math.min(forbiddenPage, totalForbiddenPages));
+  const activeWordPage = Math.max(1, Math.min(wordPage, totalWordPages));
+  const activeTermPage = Math.max(1, Math.min(termPage, totalTermPages));
+
+  const paginatedDomains = filteredDomains.slice((activeDomainPage - 1) * pageSize, activeDomainPage * pageSize);
+  const paginatedForbidden = filteredForbidden.slice((activeForbiddenPage - 1) * pageSize, activeForbiddenPage * pageSize);
+  const paginatedWords = filteredWords.slice((activeWordPage - 1) * pageSize, activeWordPage * pageSize);
+  const paginatedTerms = filteredTerms.slice((activeTermPage - 1) * pageSize, activeTermPage * pageSize);
+
+  const renderPaginationControls = (currentPage: number, totalPages: number, setPage: (p: number) => void) => {
+    if (totalPages <= 1) return null;
+
+    const pageRange = 2; // Show 2 pages before and after current page
+    const pages: (number | string)[] = [];
+
+    // Always include page 1
+    pages.push(1);
+
+    const start = Math.max(2, currentPage - pageRange);
+    const end = Math.min(totalPages - 1, currentPage + pageRange);
+
+    if (start > 2) {
+      pages.push('...');
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (end < totalPages - 1) {
+      pages.push('...');
+    }
+
+    // Always include the last page if it's more than 1
+    if (totalPages > 1) {
+      pages.push(totalPages);
+    }
+
+    return (
+      <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', marginTop: '1.5rem', alignItems: 'center' }}>
+        <button 
+          className="btn btn-secondary" 
+          style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
+          disabled={currentPage === 1} 
+          onClick={() => setPage(currentPage - 1)}
+        >
+          &lt;
+        </button>
+        {pages.map((p, idx) => {
+          if (p === '...') {
+            return (
+              <span key={`ellipsis-${idx}`} style={{ padding: '0.25rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                ...
+              </span>
+            );
+          }
+          return (
+            <button 
+              key={`page-${p}`} 
+              className={`btn ${currentPage === p ? 'btn-primary' : 'btn-secondary'}`} 
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem', minWidth: '2rem' }}
+              onClick={() => setPage(p as number)}
+            >
+              {p}
+            </button>
+          );
+        })}
+        <button 
+          className="btn btn-secondary" 
+          style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
+          disabled={currentPage === totalPages} 
+          onClick={() => setPage(currentPage + 1)}
+        >
+          &gt;
+        </button>
+      </div>
+    );
+  };
+
+  const renderPageSizeSelector = () => {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          {locale === 'ko' ? '목록 개수 설정:' : 'Items per page:'}
+        </span>
+        <input 
+          type="number" 
+          className="form-control" 
+          style={{ width: '70px', padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
+          value={pageSize} 
+          onChange={(e) => {
+            const val = parseInt(e.target.value);
+            if (val > 0) {
+              setPageSize(val);
+              setDomainPage(1);
+              setForbiddenPage(1);
+              setWordPage(1);
+              setTermPage(1);
+            }
+          }}
+          min={1}
+        />
+      </div>
+    );
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -324,7 +611,7 @@ export default function StandardizationManagement() {
           {locale === 'ko' ? '도메인 관리' : 'Domain Registry'}
         </button>
         <button className={`tab-item ${activeTab === 'forbidden' ? 'active' : ''}`} onClick={() => { setActiveTab('forbidden'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '금칙어 관리' : 'Forbidden Words'}
+          {locale === 'ko' ? '금칙어(이음동어) 관리' : 'Forbidden Words(Synonyms)'}
         </button>
         <button className={`tab-item ${activeTab === 'words' ? 'active' : ''}`} onClick={() => { setActiveTab('words'); resetForms(); setShowForm(false); }}>
           {locale === 'ko' ? '표준단어 관리' : 'Standard Words'}
@@ -359,35 +646,57 @@ export default function StandardizationManagement() {
           <div className="glass-card" style={{ maxWidth: '600px' }}>
             <h2>{editingId ? (locale === 'ko' ? '도메인 수정' : 'Edit Domain') : (locale === 'ko' ? '도메인 등록' : 'Register Domain')}</h2>
             <form onSubmit={handleCreateOrUpdate} style={{ marginTop: '1.5rem' }}>
-              <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '도메인명' : 'Domain Name'}</label>
-                <input type="text" className="form-control" value={domainForm.name} onChange={(e) => setDomainForm({ ...domainForm, name: e.target.value })} required placeholder="e.g. 금액, 수량, 일자" />
-              </div>
               <div className="grid-2">
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '데이터 타입' : 'Data Type'}</label>
-                  <select className="form-control" value={domainForm.dataType} onChange={(e) => setDomainForm({ ...domainForm, dataType: e.target.value })} required>
+                  <label className="form-label">{locale === 'ko' ? '도메인 그룹 *' : 'Domain Group *'}</label>
+                  <input type="text" className="form-control" value={domainForm.domainGroup || ''} onChange={(e) => setDomainForm({ ...domainForm, domainGroup: e.target.value })} required placeholder="e.g. 코드, 수량, 금액" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '도메인 분류 *' : 'Domain Classification *'}</label>
+                  <input type="text" className="form-control" value={domainForm.domainClassification || ''} onChange={(e) => setDomainForm({ ...domainForm, domainClassification: e.target.value })} required placeholder="e.g. 여부코드, 금액통화, 비율" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">{locale === 'ko' ? '도메인명 *' : 'Domain Name *'}</label>
+                <input type="text" className="form-control" value={domainForm.name || ''} onChange={(e) => setDomainForm({ ...domainForm, name: e.target.value })} required placeholder="e.g. 등록여부코드, 거래금액, 부가세율" />
+              </div>
+              <div className="grid-3">
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '데이터 타입 *' : 'Data Type *'}</label>
+                  <select className="form-control" value={domainForm.dataType || 'VARCHAR'} onChange={(e) => setDomainForm({ ...domainForm, dataType: e.target.value })} required>
                     <option value="VARCHAR">VARCHAR</option>
                     <option value="CHAR">CHAR</option>
-                    <option value="INTEGER">INTEGER</option>
                     <option value="NUMERIC">NUMERIC</option>
-                    <option value="DATE">DATE</option>
-                    <option value="TIMESTAMP">TIMESTAMP</option>
+                    <option value="DATETIME">DATETIME</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '길이' : 'Length'}</label>
-                  <input type="number" className="form-control" value={domainForm.length || ''} onChange={(e) => setDomainForm({ ...domainForm, length: parseInt(e.target.value) || undefined })} />
+                  <label className="form-label">{locale === 'ko' ? '데이터 길이' : 'Data Length'}</label>
+                  <input type="number" className="form-control" value={domainForm.dataLength !== undefined ? domainForm.dataLength : ''} onChange={(e) => setDomainForm({ ...domainForm, dataLength: e.target.value ? parseInt(e.target.value) : undefined })} placeholder="e.g. 100" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '소수점 길이' : 'Decimal Length'}</label>
+                  <input type="number" className="form-control" value={domainForm.decimalLength !== undefined ? domainForm.decimalLength : ''} onChange={(e) => setDomainForm({ ...domainForm, decimalLength: e.target.value ? parseInt(e.target.value) : undefined })} placeholder="e.g. 0" />
                 </div>
               </div>
               <div className="grid-2">
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '소수점 정밀도' : 'Precision'}</label>
-                  <input type="number" className="form-control" value={domainForm.precisionVal || ''} onChange={(e) => setDomainForm({ ...domainForm, precisionVal: parseInt(e.target.value) || undefined })} />
+                  <label className="form-label">{locale === 'ko' ? '저장형식' : 'Storage Format'}</label>
+                  <input type="text" className="form-control" value={domainForm.storageFormat || ''} onChange={(e) => setDomainForm({ ...domainForm, storageFormat: e.target.value })} placeholder="e.g. VARCHAR(100), NUMERIC(10,2)" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '포맷 패턴' : 'Format Pattern'}</label>
-                  <input type="text" className="form-control" value={domainForm.formatPattern || ''} onChange={(e) => setDomainForm({ ...domainForm, formatPattern: e.target.value })} placeholder="e.g. YYYYMMDD" />
+                  <label className="form-label">{locale === 'ko' ? '표현형식' : 'Expression Format'}</label>
+                  <input type="text" className="form-control" value={domainForm.expressionFormat || ''} onChange={(e) => setDomainForm({ ...domainForm, expressionFormat: e.target.value })} placeholder="e.g. YYYY-MM-DD, XXX-XX" />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '단위' : 'Unit'}</label>
+                  <input type="text" className="form-control" value={domainForm.unit || ''} onChange={(e) => setDomainForm({ ...domainForm, unit: e.target.value })} placeholder="e.g. 원, kg, %" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '허용값' : 'Allowed Values'}</label>
+                  <input type="text" className="form-control" value={domainForm.allowedValues || ''} onChange={(e) => setDomainForm({ ...domainForm, allowedValues: e.target.value })} placeholder="e.g. Y/N, 1-100" />
                 </div>
               </div>
               <div className="form-group">
@@ -402,42 +711,66 @@ export default function StandardizationManagement() {
           </div>
         ) : (
           <div className="glass-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder={locale === 'ko' ? '도메인 검색...' : 'Search domains...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {renderPageSizeSelector()}
+            </div>
             {loading ? <p>Loading...</p> : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{locale === 'ko' ? '도메인명' : 'Domain Name'}</th>
-                    <th>{locale === 'ko' ? '물리 타입' : 'Physical Type'}</th>
-                    <th>{locale === 'ko' ? '길이' : 'Length'}</th>
-                    <th>{locale === 'ko' ? '정밀도' : 'Precision'}</th>
-                    <th>{locale === 'ko' ? '패턴' : 'Pattern'}</th>
-                    <th>{locale === 'ko' ? '설명' : 'Description'}</th>
-                    <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {domains.length === 0 ? (
+              <>
+                <table className="table" style={{ fontSize: '0.9rem' }}>
+                  <thead>
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '등록된 도메인이 없습니다.' : 'No domains registered.'}</td>
+                      <th>{locale === 'ko' ? '도메인 그룹' : 'Domain Group'}</th>
+                      <th>{locale === 'ko' ? '도메인 분류' : 'Domain Classification'}</th>
+                      <th>{locale === 'ko' ? '도메인명' : 'Domain Name'}</th>
+                      <th>{locale === 'ko' ? '데이터 타입' : 'Data Type'}</th>
+                      <th>{locale === 'ko' ? '데이터 길이' : 'Data Length'}</th>
+                      <th>{locale === 'ko' ? '소수점 길이' : 'Decimal Length'}</th>
+                      <th>{locale === 'ko' ? '저장형식' : 'Storage Format'}</th>
+                      <th>{locale === 'ko' ? '표현형식' : 'Expression Format'}</th>
+                      <th>{locale === 'ko' ? '단위' : 'Unit'}</th>
+                      <th>{locale === 'ko' ? '허용값' : 'Allowed Values'}</th>
+                      <th>{locale === 'ko' ? '설명' : 'Description'}</th>
+                      <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
                     </tr>
-                  ) : (
-                    domains.map((d) => (
-                      <tr key={d.id}>
-                        <td><strong>{d.name}</strong></td>
-                        <td><span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--color-primary)' }}>{d.dataType}</span></td>
-                        <td>{d.length || '-'}</td>
-                        <td>{d.precisionVal || '-'}</td>
-                        <td>{d.formatPattern || '-'}</td>
-                        <td>{d.description || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditDomain(d)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(d.id!)}><Trash2 size={14} /></button>
-                        </td>
+                  </thead>
+                  <tbody>
+                    {paginatedDomains.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '검색 결과가 없거나 등록된 도메인이 없습니다.' : 'No domains found.'}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      paginatedDomains.map((d) => (
+                        <tr key={d.id}>
+                          <td><span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--color-primary)' }}>{d.domainGroup}</span></td>
+                          <td><strong>{d.domainClassification}</strong></td>
+                          <td>{d.name}</td>
+                          <td>{d.dataType ? <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' }}>{d.dataType}</span> : '-'}</td>
+                          <td>{d.dataLength !== undefined && d.dataLength !== null ? d.dataLength : '-'}</td>
+                          <td>{d.decimalLength !== undefined && d.decimalLength !== null ? d.decimalLength : '-'}</td>
+                          <td><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{d.storageFormat || '-'}</span></td>
+                          <td>{d.expressionFormat || '-'}</td>
+                          <td>{d.unit || '-'}</td>
+                          <td>{d.allowedValues || '-'}</td>
+                          <td>{d.description || '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditDomain(d)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(d.id!)}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPaginationControls(activeDomainPage, totalDomainPages, setDomainPage)}
+              </>
             )}
           </div>
         )
@@ -457,6 +790,10 @@ export default function StandardizationManagement() {
                 <label className="form-label">{locale === 'ko' ? '권장 대체어' : 'Recommended Word'}</label>
                 <input type="text" className="form-control" value={forbiddenForm.replacement || ''} onChange={(e) => setForbiddenForm({ ...forbiddenForm, replacement: e.target.value })} placeholder="e.g. PWD, IDENT, LOC" />
               </div>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1.5rem 0' }}>
+                <input type="checkbox" id="forbiddenIsUsed" checked={forbiddenForm.isUsed !== false} onChange={(e) => setForbiddenForm({ ...forbiddenForm, isUsed: e.target.checked })} />
+                <label htmlFor="forbiddenIsUsed" style={{ cursor: 'pointer', fontWeight: 'bold' }}>{locale === 'ko' ? '사용 여부' : 'Is Used'}</label>
+              </div>
               <div className="form-group">
                 <label className="form-label">{locale === 'ko' ? '설명' : 'Description'}</label>
                 <textarea className="form-control" rows={3} value={forbiddenForm.description || ''} onChange={(e) => setForbiddenForm({ ...forbiddenForm, description: e.target.value })} />
@@ -469,36 +806,56 @@ export default function StandardizationManagement() {
           </div>
         ) : (
           <div className="glass-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder={locale === 'ko' ? '금칙어 검색...' : 'Search forbidden words...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {renderPageSizeSelector()}
+            </div>
             {loading ? <p>Loading...</p> : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{locale === 'ko' ? '차단 단어' : 'Forbidden Word'}</th>
-                    <th>{locale === 'ko' ? '대체 추천어' : 'Recommended Word'}</th>
-                    <th>{locale === 'ko' ? '설명' : 'Description'}</th>
-                    <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {forbiddenWords.length === 0 ? (
+              <>
+                <table className="table">
+                  <thead>
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '등록된 금칙어가 없습니다.' : 'No forbidden words registered.'}</td>
+                      <th>{locale === 'ko' ? '차단 단어' : 'Forbidden Word'}</th>
+                      <th>{locale === 'ko' ? '대체 추천어' : 'Recommended Word'}</th>
+                      <th>{locale === 'ko' ? '사용 여부' : 'Is Used'}</th>
+                      <th>{locale === 'ko' ? '설명' : 'Description'}</th>
+                      <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
                     </tr>
-                  ) : (
-                    forbiddenWords.map((fw) => (
-                      <tr key={fw.id}>
-                        <td><span style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>{fw.word}</span></td>
-                        <td>{fw.replacement ? <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' }}>{fw.replacement}</span> : '-'}</td>
-                        <td>{fw.description || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditForbidden(fw)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(fw.id!)}><Trash2 size={14} /></button>
-                        </td>
+                  </thead>
+                  <tbody>
+                    {paginatedForbidden.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '검색 결과가 없거나 등록된 금칙어가 없습니다.' : 'No forbidden words found.'}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      paginatedForbidden.map((fw) => (
+                        <tr key={fw.id}>
+                          <td><span style={{ color: 'var(--color-danger)', fontWeight: 'bold' }}>{fw.word}</span></td>
+                          <td>{fw.replacement ? <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' }}>{fw.replacement}</span> : '-'}</td>
+                          <td>
+                            <span className="badge" style={{ background: fw.isUsed !== false ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: fw.isUsed !== false ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              {fw.isUsed !== false ? (locale === 'ko' ? '사용' : 'Active') : (locale === 'ko' ? '미사용' : 'Inactive')}
+                            </span>
+                          </td>
+                          <td>{fw.description || '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditForbidden(fw)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(fw.id!)}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPaginationControls(activeForbiddenPage, totalForbiddenPages, setForbiddenPage)}
+              </>
             )}
           </div>
         )
@@ -510,25 +867,50 @@ export default function StandardizationManagement() {
           <div className="glass-card" style={{ maxWidth: '600px' }}>
             <h2>{editingId ? (locale === 'ko' ? '표준단어 수정' : 'Edit Standard Word') : (locale === 'ko' ? '표준단어 등록' : 'Register Standard Word')}</h2>
             <form onSubmit={handleCreateOrUpdate} style={{ marginTop: '1.5rem' }}>
-              <div className="grid-2">
+              <div className="grid-3">
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '논리 명칭' : 'Logical Word'}</label>
+                  <label className="form-label">{locale === 'ko' ? '논리 명칭 *' : 'Logical Word *'}</label>
                   <input type="text" className="form-control" value={wordForm.logicalName} onChange={(e) => setWordForm({ ...wordForm, logicalName: e.target.value })} required placeholder="e.g. 고객, 주문, 번호" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">{locale === 'ko' ? '물리 명칭 (약어)' : 'Physical Abbreviation'}</label>
+                  <label className="form-label">{locale === 'ko' ? '물리 명칭 (약어) *' : 'Physical Abbreviation *'}</label>
                   <input type="text" className="form-control" value={wordForm.physicalName} onChange={(e) => setWordForm({ ...wordForm, physicalName: e.target.value.toUpperCase() })} required placeholder="e.g. CUST, ORD, NO" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '영문명' : 'English Name'}</label>
+                  <input type="text" className="form-control" value={wordForm.englishName || ''} onChange={(e) => setWordForm({ ...wordForm, englishName: e.target.value })} placeholder="e.g. Customer, Order, Number" />
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '연계 도메인' : 'Linked Domain'}</label>
-                <select className="form-control" value={wordForm.domainId} onChange={(e) => setWordForm({ ...wordForm, domainId: e.target.value })} required>
+                <label className="form-label">
+                  {locale === 'ko' 
+                    ? `연계 도메인 분류${wordForm.isFormatWord ? ' *' : ''}` 
+                    : `Linked Domain Classification${wordForm.isFormatWord ? ' *' : ''}`}
+                </label>
+                <select className="form-control" value={wordForm.domainId} onChange={(e) => setWordForm({ ...wordForm, domainId: e.target.value })} required={!!wordForm.isFormatWord}>
                   <option value="">{locale === 'ko' ? '-- 선택하세요 --' : '-- Select Domain --'}</option>
                   {domains.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} ({d.dataType}{d.length ? `(${d.length})` : ''})</option>
+                    <option key={d.id} value={d.id}>{d.domainClassification} (Group: {d.domainGroup}, Name: {d.name})</option>
                   ))}
                 </select>
               </div>
+
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1.5rem 0' }}>
+                <input type="checkbox" id="isFormatWord" checked={!!wordForm.isFormatWord} onChange={(e) => setWordForm({ ...wordForm, isFormatWord: e.target.checked })} />
+                <label htmlFor="isFormatWord" style={{ cursor: 'pointer', fontWeight: 'bold' }}>{locale === 'ko' ? '형식단어 여부' : 'Is Format Word'}</label>
+              </div>
+
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '이음동의어' : 'Synonyms'}</label>
+                  <input type="text" className="form-control" value={wordForm.synonyms || ''} onChange={(e) => setWordForm({ ...wordForm, synonyms: e.target.value })} placeholder="e.g. 고객명, 회원명" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '연관 금칙어' : 'Associated Forbidden Words'}</label>
+                  <input type="text" className="form-control" value={wordForm.forbiddenWords || ''} onChange={(e) => setWordForm({ ...wordForm, forbiddenWords: e.target.value })} placeholder="e.g. CUST_NM, MEMBER" />
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">{locale === 'ko' ? '설명' : 'Description'}</label>
                 <textarea className="form-control" rows={3} value={wordForm.description || ''} onChange={(e) => setWordForm({ ...wordForm, description: e.target.value })} />
@@ -541,38 +923,64 @@ export default function StandardizationManagement() {
           </div>
         ) : (
           <div className="glass-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder={locale === 'ko' ? '표준단어 검색...' : 'Search standard words...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {renderPageSizeSelector()}
+            </div>
             {loading ? <p>Loading...</p> : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{locale === 'ko' ? '논리명 (한글)' : 'Logical Name'}</th>
-                    <th>{locale === 'ko' ? '물리명 (영문약어)' : 'Physical Abbreviation'}</th>
-                    <th>{locale === 'ko' ? '참조 도메인' : 'Referenced Domain'}</th>
-                    <th>{locale === 'ko' ? '설명' : 'Description'}</th>
-                    <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {words.length === 0 ? (
+              <>
+                <table className="table" style={{ fontSize: '0.9rem' }}>
+                  <thead>
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '등록된 표준단어가 없습니다.' : 'No standard words registered.'}</td>
+                      <th>{locale === 'ko' ? '논리명 (한글)' : 'Logical Name'}</th>
+                      <th>{locale === 'ko' ? '물리명 (영문약어)' : 'Physical Abbreviation'}</th>
+                      <th>{locale === 'ko' ? '영문명' : 'English Name'}</th>
+                      <th>{locale === 'ko' ? '연계 도메인 분류' : 'Linked Domain Classification'}</th>
+                      <th>{locale === 'ko' ? '형식단어' : 'Format Word'}</th>
+                      <th>{locale === 'ko' ? '이음동의어' : 'Synonyms'}</th>
+                      <th>{locale === 'ko' ? '연관 금칙어' : 'Forbidden Words'}</th>
+                      <th>{locale === 'ko' ? '설명' : 'Description'}</th>
+                      <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
                     </tr>
-                  ) : (
-                    words.map((w) => (
-                      <tr key={w.id}>
-                        <td><strong>{w.logicalName}</strong></td>
-                        <td><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{w.physicalName}</span></td>
-                        <td><span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' }}>{w.domainName || 'No Domain'}</span></td>
-                        <td>{w.description || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditWord(w)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(w.id!)}><Trash2 size={14} /></button>
-                        </td>
+                  </thead>
+                  <tbody>
+                    {paginatedWords.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '검색 결과가 없거나 등록된 표준단어가 없습니다.' : 'No standard words found.'}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      paginatedWords.map((w) => (
+                        <tr key={w.id}>
+                          <td><strong>{w.logicalName}</strong></td>
+                          <td><span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{w.physicalName}</span></td>
+                          <td>{w.englishName || '-'}</td>
+                          <td><span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: 'var(--color-success)' }}>{w.domainName || 'No Domain'}</span></td>
+                          <td>
+                            {w.isFormatWord ? (
+                              <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--color-primary)' }}>{locale === 'ko' ? '형식단어' : 'Format'}</span>
+                            ) : '-'}
+                          </td>
+                          <td>{w.synonyms || '-'}</td>
+                          <td>{w.forbiddenWords ? <span style={{ color: 'var(--color-danger)' }}>{w.forbiddenWords}</span> : '-'}</td>
+                          <td>{w.description || '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditWord(w)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(w.id!)}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPaginationControls(activeWordPage, totalWordPages, setWordPage)}
+              </>
             )}
           </div>
         )
@@ -587,8 +995,17 @@ export default function StandardizationManagement() {
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                 {locale === 'ko' ? '선택한 표준단어들의 조합 순서에 따라 물리명(예: CUST_NO)과 도메인 타입이 자동 계산됩니다.' : 'Logical/Physical names and data types are automatically generated based on word combination order.'}
               </p>
+              <div style={{ marginBottom: '1rem' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder={locale === 'ko' ? '표준단어 찾기...' : 'Search standard words...'}
+                  value={wordSelectorSearch}
+                  onChange={(e) => setWordSelectorSearch(e.target.value)}
+                />
+              </div>
               <div style={{ maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.5rem' }}>
-                {words.map(w => (
+                {filteredSelectorWords.map(w => (
                   <label key={w.id} className="glass-card" style={{ display: 'flex', gap: '1rem', alignItems: 'center', padding: '0.75rem 1rem', cursor: 'pointer', margin: 0 }}>
                     <input
                       type="checkbox"
@@ -615,6 +1032,41 @@ export default function StandardizationManagement() {
                   <label className="form-label">{locale === 'ko' ? '용어 영문명 (물리명)' : 'Physical Column Name'}</label>
                   <input type="text" className="form-control" value={termForm.physicalName} onChange={(e) => setTermForm({ ...termForm, physicalName: e.target.value.toUpperCase() })} required placeholder="e.g. CUST_NO, ORD_DT" />
                 </div>
+                
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">{locale === 'ko' ? '공통표준도메인명' : 'Common Domain Name'}</label>
+                    <select 
+                      className="form-control" 
+                      value={termForm.commonDomainName || ''} 
+                      onChange={(e) => setTermForm({ ...termForm, commonDomainName: e.target.value })}
+                    >
+                      <option value="">{locale === 'ko' ? '-- 선택하세요 --' : '-- Select Domain --'}</option>
+                      {domains.map(d => (
+                        <option key={d.id} value={d.name}>{d.name} ({d.domainClassification})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{locale === 'ko' ? '허용값' : 'Allowed Values'}</label>
+                    <input type="text" className="form-control" value={termForm.allowedValues || ''} onChange={(e) => setTermForm({ ...termForm, allowedValues: e.target.value })} placeholder="e.g. Y/N, 1-100" />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">{locale === 'ko' ? '저장형식' : 'Storage Format'}</label>
+                    <input type="text" className="form-control" value={termForm.storageFormat || ''} onChange={(e) => setTermForm({ ...termForm, storageFormat: e.target.value })} placeholder="e.g. VARCHAR(100), NUMERIC(10,2)" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">{locale === 'ko' ? '표현형식' : 'Expression Format'}</label>
+                    <input type="text" className="form-control" value={termForm.expressionFormat || ''} onChange={(e) => setTermForm({ ...termForm, expressionFormat: e.target.value })} placeholder="e.g. YYYY-MM-DD, XXX-XX-XXXX" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{locale === 'ko' ? '행정코드명' : 'Admin Code Name'}</label>
+                  <input type="text" className="form-control" value={termForm.adminCodeName || ''} onChange={(e) => setTermForm({ ...termForm, adminCodeName: e.target.value })} placeholder="e.g. 행정동코드" />
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">{locale === 'ko' ? '설명' : 'Description'}</label>
                   <textarea className="form-control" rows={3} value={termForm.description || ''} onChange={(e) => setTermForm({ ...termForm, description: e.target.value })} />
@@ -628,36 +1080,60 @@ export default function StandardizationManagement() {
           </div>
         ) : (
           <div className="glass-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                className="form-control"
+                style={{ maxWidth: '300px' }}
+                placeholder={locale === 'ko' ? '표준용어 검색...' : 'Search standard terms...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {renderPageSizeSelector()}
+            </div>
             {loading ? <p>Loading...</p> : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{locale === 'ko' ? '용어 논리명' : 'Logical Term'}</th>
-                    <th>{locale === 'ko' ? '용어 물리명' : 'Physical Column Name'}</th>
-                    <th>{locale === 'ko' ? '설명' : 'Description'}</th>
-                    <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {terms.length === 0 ? (
+              <>
+                <table className="table" style={{ fontSize: '0.9rem' }}>
+                  <thead>
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '등록된 표준용어가 없습니다.' : 'No standard terms registered.'}</td>
+                      <th>{locale === 'ko' ? '용어 논리명' : 'Logical Term'}</th>
+                      <th>{locale === 'ko' ? '용어 물리명' : 'Physical Column Name'}</th>
+                      <th>{locale === 'ko' ? '공통표준도메인명' : 'Common Domain'}</th>
+                      <th>{locale === 'ko' ? '허용값' : 'Allowed Values'}</th>
+                      <th>{locale === 'ko' ? '저장형식' : 'Storage Format'}</th>
+                      <th>{locale === 'ko' ? '표현형식' : 'Expression Format'}</th>
+                      <th>{locale === 'ko' ? '행정코드명' : 'Admin Code'}</th>
+                      <th>{locale === 'ko' ? '설명' : 'Description'}</th>
+                      <th style={{ textAlign: 'right' }}>{locale === 'ko' ? '관리' : 'Actions'}</th>
                     </tr>
-                  ) : (
-                    terms.map((t) => (
-                      <tr key={t.id}>
-                        <td><strong>{t.logicalName}</strong></td>
-                        <td><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--color-primary)' }}>{t.physicalName}</span></td>
-                        <td>{t.description || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditTerm(t)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
-                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(t.id!)}><Trash2 size={14} /></button>
-                        </td>
+                  </thead>
+                  <tbody>
+                    {paginatedTerms.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{locale === 'ko' ? '검색 결과가 없거나 등록된 표준용어가 없습니다.' : 'No standard terms found.'}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      paginatedTerms.map((t) => (
+                        <tr key={t.id}>
+                          <td><strong>{t.logicalName}</strong></td>
+                          <td><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--color-primary)' }}>{t.physicalName}</span></td>
+                          <td>{t.commonDomainName || '-'}</td>
+                          <td>{t.allowedValues || '-'}</td>
+                          <td>{t.storageFormat || '-'}</td>
+                          <td>{t.expressionFormat || '-'}</td>
+                          <td>{t.adminCodeName || '-'}</td>
+                          <td>{t.description || '-'}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem', fontSize: '0.8rem' }} onClick={() => startEditTerm(t)}>{locale === 'ko' ? '수정' : 'Edit'}</button>
+                            <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', color: 'var(--color-danger)', fontSize: '0.8rem' }} onClick={() => handleDelete(t.id!)}><Trash2 size={14} /></button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {renderPaginationControls(activeTermPage, totalTermPages, setTermPage)}
+              </>
             )}
           </div>
         )
@@ -701,6 +1177,18 @@ export default function StandardizationManagement() {
                 <option value="words">{locale === 'ko' ? '표준단어 (Standard Words)' : 'Standard Words'}</option>
                 <option value="terms">{locale === 'ko' ? '표준용어 (Standard Terms)' : 'Standard Terms'}</option>
               </select>
+            </div>
+
+            <div style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <strong style={{ fontSize: '0.85rem', display: 'block', marginBottom: '0.5rem' }}>
+                {locale === 'ko' ? '📌 선택된 대상의 CSV 헤더/컬럼 규격' : '📌 Expected CSV Header Columns'}
+              </strong>
+              <code style={{ fontSize: '0.8rem', color: 'var(--color-primary)', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                {importType === 'domains' && 'domainGroup,domainClassification,name,dataType,dataLength,decimalLength,storageFormat,expressionFormat,unit,allowedValues,description'}
+                {importType === 'forbidden-words' && 'word,replacement,isUsed,description'}
+                {importType === 'words' && 'logicalName,physicalName,englishName,domainClassification,isFormatWord,synonyms,forbiddenWords,description'}
+                {importType === 'terms' && 'logicalName,physicalName,description,wordLogicalNames'}
+              </code>
             </div>
 
             <div style={{ marginTop: '1.5rem' }}>

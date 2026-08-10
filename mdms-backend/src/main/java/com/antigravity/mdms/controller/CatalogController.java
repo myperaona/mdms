@@ -86,7 +86,7 @@ public class CatalogController {
         }
         
         // Trigger ingestion asynchronously on a separate thread pool
-        ingestionService.runIngestionAsync(dsId, activeSchema);
+        ingestionService.runIngestionAsync(dsId, activeSchema, TenantContext.getCurrentTenantId());
 
         Map<String, String> resp = new HashMap<>();
         resp.put("message", "Metadata ingestion triggered successfully. Check job logs for updates.");

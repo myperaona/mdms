@@ -5,7 +5,7 @@
 
     <!-- === Domain CRUD === -->
     <select id="findAllDomains" resultType="com.antigravity.mdms.model.Domain">
-        SELECT * FROM domain ORDER BY name ASC
+        SELECT * FROM domain ORDER BY domain_group ASC, domain_classification ASC, name ASC
     </select>
 
     <select id="findDomainById" resultType="com.antigravity.mdms.model.Domain">
@@ -16,18 +16,36 @@
         SELECT * FROM domain WHERE name = #{name}
     </select>
 
+    <select id="findDomainByHierarchicalKey" resultType="com.antigravity.mdms.model.Domain">
+        SELECT * FROM domain 
+        WHERE domain_group = #{domainGroup} 
+          AND domain_classification = #{domainClassification} 
+          AND name = #{name}
+    </select>
+
+    <select id="findFirstDomainByClassification" resultType="com.antigravity.mdms.model.Domain">
+        SELECT * FROM domain 
+        WHERE domain_classification = #{domainClassification}
+        LIMIT 1
+    </select>
+
     <insert id="insertDomain" parameterType="com.antigravity.mdms.model.Domain">
-        INSERT INTO domain (id, tenant_id, name, data_type, length, precision_val, format_pattern, description, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{name}, #{dataType}, #{length}, #{precisionVal}, #{formatPattern}, #{description}, CURRENT_TIMESTAMP)
+        INSERT INTO domain (id, tenant_id, domain_group, domain_classification, name, data_type, data_length, decimal_length, storage_format, expression_format, unit, allowed_values, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{domainGroup}, #{domainClassification}, #{name}, #{dataType}, #{dataLength}, #{decimalLength}, #{storageFormat}, #{expressionFormat}, #{unit}, #{allowedValues}, #{description}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateDomain" parameterType="com.antigravity.mdms.model.Domain">
         UPDATE domain
-        SET name = #{name},
+        SET domain_group = #{domainGroup},
+            domain_classification = #{domainClassification},
+            name = #{name},
             data_type = #{dataType},
-            length = #{length},
-            precision_val = #{precisionVal},
-            format_pattern = #{formatPattern},
+            data_length = #{dataLength},
+            decimal_length = #{decimalLength},
+            storage_format = #{storageFormat},
+            expression_format = #{expressionFormat},
+            unit = #{unit},
+            allowed_values = #{allowedValues},
             description = #{description}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
@@ -50,15 +68,16 @@
     </select>
 
     <insert id="insertForbiddenWord" parameterType="com.antigravity.mdms.model.ForbiddenWord">
-        INSERT INTO forbidden_word (id, tenant_id, word, replacement, description, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{word}, #{replacement}, #{description}, CURRENT_TIMESTAMP)
+        INSERT INTO forbidden_word (id, tenant_id, word, replacement, description, is_used, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{word}, #{replacement}, #{description}, #{isUsed}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateForbiddenWord" parameterType="com.antigravity.mdms.model.ForbiddenWord">
         UPDATE forbidden_word
         SET word = #{word},
             replacement = #{replacement},
-            description = #{description}
+            description = #{description},
+            is_used = #{isUsed}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
 
@@ -68,37 +87,47 @@
 
     <!-- === Standard Word CRUD === -->
     <select id="findAllStandardWords" resultType="com.antigravity.mdms.model.StandardWord">
-        SELECT w.*, d.name AS domainName 
+        SELECT w.*, d.domain_classification AS domainName 
         FROM standard_word w 
         LEFT JOIN domain d ON w.domain_id = d.id 
         ORDER BY w.logical_name ASC
     </select>
 
     <select id="findStandardWordById" resultType="com.antigravity.mdms.model.StandardWord">
-        SELECT w.*, d.name AS domainName 
+        SELECT w.*, d.domain_classification AS domainName 
         FROM standard_word w 
         LEFT JOIN domain d ON w.domain_id = d.id 
         WHERE w.id = #{id, jdbcType=OTHER}
     </select>
 
     <select id="findStandardWordByLogicalName" resultType="com.antigravity.mdms.model.StandardWord">
-        SELECT * FROM standard_word WHERE logical_name = #{logicalName}
+        SELECT w.*, d.domain_classification AS domainName 
+        FROM standard_word w 
+        LEFT JOIN domain d ON w.domain_id = d.id 
+        WHERE w.logical_name = #{logicalName}
     </select>
 
     <select id="findStandardWordByPhysicalName" resultType="com.antigravity.mdms.model.StandardWord">
-        SELECT * FROM standard_word WHERE physical_name = #{physicalName}
+        SELECT w.*, d.domain_classification AS domainName 
+        FROM standard_word w 
+        LEFT JOIN domain d ON w.domain_id = d.id 
+        WHERE w.physical_name = #{physicalName}
     </select>
 
     <insert id="insertStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
-        INSERT INTO standard_word (id, tenant_id, logical_name, physical_name, domain_id, description, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{domainId, jdbcType=OTHER}, #{description}, CURRENT_TIMESTAMP)
+        INSERT INTO standard_word (id, tenant_id, logical_name, physical_name, english_name, domain_id, is_format_word, synonyms, forbidden_words, description, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{englishName}, #{domainId, jdbcType=OTHER}, #{isFormatWord}, #{synonyms}, #{forbiddenWords}, #{description}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
         UPDATE standard_word
         SET logical_name = #{logicalName},
             physical_name = #{physicalName},
+            english_name = #{englishName},
             domain_id = #{domainId, jdbcType=OTHER},
+            is_format_word = #{isFormatWord},
+            synonyms = #{synonyms},
+            forbidden_words = #{forbiddenWords},
             description = #{description}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
@@ -125,8 +154,8 @@
     </select>
 
     <insert id="insertStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
-        INSERT INTO standard_term (id, tenant_id, logical_name, physical_name, description, word_ids, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{description}, #{wordIds}, CURRENT_TIMESTAMP)
+        INSERT INTO standard_term (id, tenant_id, logical_name, physical_name, description, word_ids, common_domain_name, allowed_values, storage_format, expression_format, admin_code_name, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{description}, #{wordIds}, #{commonDomainName}, #{allowedValues}, #{storageFormat}, #{expressionFormat}, #{adminCodeName}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
@@ -134,7 +163,12 @@
         SET logical_name = #{logicalName},
             physical_name = #{physicalName},
             description = #{description},
-            word_ids = #{wordIds}
+            word_ids = #{wordIds},
+            common_domain_name = #{commonDomainName},
+            allowed_values = #{allowedValues},
+            storage_format = #{storageFormat},
+            expression_format = #{expressionFormat},
+            admin_code_name = #{adminCodeName}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
 

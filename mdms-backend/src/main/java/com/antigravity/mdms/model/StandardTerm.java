@@ -10,6 +10,11 @@ public class StandardTerm {
     private String physicalName;
     private String description;
     private String wordIds;
+    private String commonDomainName;
+    private String allowedValues;
+    private String storageFormat;
+    private String expressionFormat;
+    private String adminCodeName;
     private Instant createdAt;
 
     // Getters and Setters
@@ -30,6 +35,21 @@ public class StandardTerm {
 
     public String getWordIds() { return wordIds; }
     public void setWordIds(String wordIds) { this.wordIds = wordIds; }
+
+    public String getCommonDomainName() { return commonDomainName; }
+    public void setCommonDomainName(String commonDomainName) { this.commonDomainName = commonDomainName; }
+
+    public String getAllowedValues() { return allowedValues; }
+    public void setAllowedValues(String allowedValues) { this.allowedValues = allowedValues; }
+
+    public String getStorageFormat() { return storageFormat; }
+    public void setStorageFormat(String storageFormat) { this.storageFormat = storageFormat; }
+
+    public String getExpressionFormat() { return expressionFormat; }
+    public void setExpressionFormat(String expressionFormat) { this.expressionFormat = expressionFormat; }
+
+    public String getAdminCodeName() { return adminCodeName; }
+    public void setAdminCodeName(String adminCodeName) { this.adminCodeName = adminCodeName; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

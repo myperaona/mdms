@@ -36,6 +36,9 @@ public class StandardizationService {
     public void validateForbiddenWords(String logicalName, String physicalName) {
         List<ForbiddenWord> forbiddenWords = mapper.findAllForbiddenWords();
         for (ForbiddenWord fw : forbiddenWords) {
+            if (Boolean.FALSE.equals(fw.getIsUsed())) {
+                continue;
+            }
             String word = fw.getWord().toLowerCase();
             if ((logicalName != null && logicalName.toLowerCase().contains(word)) ||
                 (physicalName != null && physicalName.toLowerCase().contains(word))) {
@@ -59,8 +62,8 @@ public class StandardizationService {
 
     @Transactional
     public Domain createDomain(Domain domain) {
-        if (mapper.findDomainByName(domain.getName()) != null) {
-            throw new IllegalArgumentException("Domain name already exists: " + domain.getName());
+        if (mapper.findDomainByHierarchicalKey(domain.getDomainGroup(), domain.getDomainClassification(), domain.getName()) != null) {
+            throw new IllegalArgumentException("Domain key already exists: Group=" + domain.getDomainGroup() + ", Classification=" + domain.getDomainClassification() + ", Name=" + domain.getName());
         }
         domain.setId(UUID.randomUUID());
         domain.setTenantId(UUID.fromString(TenantContext.getCurrentTenantId()));
@@ -74,9 +77,9 @@ public class StandardizationService {
         if (existing == null) {
             throw new IllegalArgumentException("Domain not found");
         }
-        Domain duplicate = mapper.findDomainByName(domain.getName());
+        Domain duplicate = mapper.findDomainByHierarchicalKey(domain.getDomainGroup(), domain.getDomainClassification(), domain.getName());
         if (duplicate != null && !duplicate.getId().equals(domain.getId())) {
-            throw new IllegalArgumentException("Domain name already exists: " + domain.getName());
+            throw new IllegalArgumentException("Domain key already exists: Group=" + domain.getDomainGroup() + ", Classification=" + domain.getDomainClassification() + ", Name=" + domain.getName());
         }
         mapper.updateDomain(domain);
         return domain;
@@ -145,6 +148,10 @@ public class StandardizationService {
     public StandardWord createStandardWord(StandardWord word) {
         validateForbiddenWords(word.getLogicalName(), word.getPhysicalName());
         
+        if (Boolean.TRUE.equals(word.getIsFormatWord()) && word.getDomainId() == null) {
+            throw new IllegalArgumentException("Linked Domain Classification is required when Is Format Word is true");
+        }
+        
         if (mapper.findStandardWordByLogicalName(word.getLogicalName()) != null) {
             throw new IllegalArgumentException("Standard logical word already exists: " + word.getLogicalName());
         }
@@ -161,6 +168,10 @@ public class StandardizationService {
     @Transactional
     public StandardWord updateStandardWord(StandardWord word) {
         validateForbiddenWords(word.getLogicalName(), word.getPhysicalName());
+        
+        if (Boolean.TRUE.equals(word.getIsFormatWord()) && word.getDomainId() == null) {
+            throw new IllegalArgumentException("Linked Domain Classification is required when Is Format Word is true");
+        }
         
         StandardWord existing = mapper.findStandardWordById(word.getId());
         if (existing == null) {
@@ -272,15 +283,8 @@ public class StandardizationService {
             StandardWord lastWord = mapper.findStandardWordById(wordIds.get(wordIds.size() - 1));
             if (lastWord != null && lastWord.getDomainId() != null) {
                 Domain domain = mapper.findDomainById(lastWord.getDomainId());
-                if (domain != null) {
-                    dataType = domain.getDataType();
-                    if (domain.getLength() != null) {
-                        dataType += "(" + domain.getLength();
-                        if (domain.getPrecisionVal() != null) {
-                            dataType += "," + domain.getPrecisionVal();
-                        }
-                        dataType += ")";
-                    }
+                if (domain != null && domain.getStorageFormat() != null && !domain.getStorageFormat().trim().isEmpty()) {
+                    dataType = domain.getStorageFormat();
                 }
             }
         }
@@ -328,43 +332,57 @@ public class StandardizationService {
                 rowIndex++;
                 report.totalRows++;
                 try {
-                    if (record.size() < 2) {
-                        report.logFail(rowIndex, "Insufficient columns. Expected: name,dataType,[length],[precision],[format],[description]");
+                    if (record.size() < 3) {
+                        report.logFail(rowIndex, "Insufficient columns. Expected: domainGroup,domainClassification,name,[dataType],[dataLength],[decimalLength],[storageFormat],[expressionFormat],[unit],[allowedValues],[description]");
                         continue;
                     }
-                    String name = record.get(0).trim();
-                    String dataType = record.get(1).trim();
+                    String domainGroup = record.get(0).trim();
+                    String domainClassification = record.get(1).trim();
+                    String name = record.get(2).trim();
                     
-                    Integer length = null;
-                    if (record.size() > 2 && !record.get(2).trim().isEmpty()) {
-                        length = Integer.parseInt(record.get(2).trim());
+                    String dataType = (record.size() > 3) ? record.get(3).trim() : "";
+                    Integer dataLength = null;
+                    if (record.size() > 4 && !record.get(4).trim().isEmpty()) {
+                        try {
+                            dataLength = Integer.parseInt(record.get(4).trim());
+                        } catch (NumberFormatException ignored) {}
                     }
-                    Integer precision = null;
-                    if (record.size() > 3 && !record.get(3).trim().isEmpty()) {
-                        precision = Integer.parseInt(record.get(3).trim());
+                    Integer decimalLength = null;
+                    if (record.size() > 5 && !record.get(5).trim().isEmpty()) {
+                        try {
+                            decimalLength = Integer.parseInt(record.get(5).trim());
+                        } catch (NumberFormatException ignored) {}
                     }
-                    String formatPattern = (record.size() > 4) ? record.get(4).trim() : "";
-                    String desc = (record.size() > 5) ? record.get(5).trim() : "";
+                    String storageFormat = (record.size() > 6) ? record.get(6).trim() : "";
+                    String expressionFormat = (record.size() > 7) ? record.get(7).trim() : "";
+                    String unit = (record.size() > 8) ? record.get(8).trim() : "";
+                    String allowedValues = (record.size() > 9) ? record.get(9).trim() : "";
+                    String desc = (record.size() > 10) ? record.get(10).trim() : "";
 
-                    if (name.isEmpty() || dataType.isEmpty()) {
-                        report.logFail(rowIndex, "Domain name and data type cannot be empty");
+                    if (domainGroup.isEmpty() || domainClassification.isEmpty() || name.isEmpty()) {
+                        report.logFail(rowIndex, "Domain Group, Classification, and Name cannot be empty");
                         continue;
                     }
 
-                    Domain duplicate = mapper.findDomainByName(name);
+                    Domain duplicate = mapper.findDomainByHierarchicalKey(domainGroup, domainClassification, name);
                     if (duplicate != null) {
-                        report.logFail(rowIndex, "Domain name already exists: " + name);
+                        report.logFail(rowIndex, "Domain already exists for hierarchical key: " + domainGroup + " > " + domainClassification + " > " + name);
                         continue;
                     }
 
                     Domain d = new Domain();
                     d.setId(UUID.randomUUID());
                     d.setTenantId(UUID.fromString(TenantContext.getCurrentTenantId()));
+                    d.setDomainGroup(domainGroup);
+                    d.setDomainClassification(domainClassification);
                     d.setName(name);
-                    d.setDataType(dataType);
-                    d.setLength(length);
-                    d.setPrecisionVal(precision);
-                    d.setFormatPattern(formatPattern);
+                    d.setDataType(dataType.isEmpty() ? null : dataType.toUpperCase());
+                    d.setDataLength(dataLength);
+                    d.setDecimalLength(decimalLength);
+                    d.setStorageFormat(storageFormat.isEmpty() ? null : storageFormat);
+                    d.setExpressionFormat(expressionFormat.isEmpty() ? null : expressionFormat);
+                    d.setUnit(unit.isEmpty() ? null : unit);
+                    d.setAllowedValues(allowedValues.isEmpty() ? null : allowedValues);
                     d.setDescription(desc);
                     mapper.insertDomain(d);
                     report.logSuccess(rowIndex, "Domain '" + name + "' imported successfully");
@@ -395,12 +413,17 @@ public class StandardizationService {
                 report.totalRows++;
                 try {
                     if (record.size() < 1) {
-                        report.logFail(rowIndex, "Insufficient columns. Expected: word,[replacement],[description]");
+                        report.logFail(rowIndex, "Insufficient columns. Expected: word,[replacement],[isUsed],[description]");
                         continue;
                     }
                     String word = record.get(0).trim();
                     String replacement = (record.size() > 1) ? record.get(1).trim() : "";
-                    String desc = (record.size() > 2) ? record.get(2).trim() : "";
+                    Boolean isUsed = true;
+                    if (record.size() > 2 && !record.get(2).trim().isEmpty()) {
+                        String isUsedStr = record.get(2).trim().toLowerCase();
+                        isUsed = "true".equals(isUsedStr) || "y".equals(isUsedStr) || "1".equals(isUsedStr);
+                    }
+                    String desc = (record.size() > 3) ? record.get(3).trim() : "";
 
                     if (word.isEmpty()) {
                         report.logFail(rowIndex, "Forbidden word cannot be empty");
@@ -417,6 +440,7 @@ public class StandardizationService {
                     fw.setTenantId(UUID.fromString(TenantContext.getCurrentTenantId()));
                     fw.setWord(word);
                     fw.setReplacement(replacement.isEmpty() ? null : replacement);
+                    fw.setIsUsed(isUsed);
                     fw.setDescription(desc);
                     mapper.insertForbiddenWord(fw);
                     report.logSuccess(rowIndex, "Forbidden word '" + word + "' imported successfully");
@@ -447,16 +471,29 @@ public class StandardizationService {
                 report.totalRows++;
                 try {
                     if (record.size() < 3) {
-                        report.logFail(rowIndex, "Insufficient columns. Expected: logicalName,physicalName,domainName,[description]");
+                        report.logFail(rowIndex, "Insufficient columns. Expected: logicalName,physicalName,englishName,[domainClassification],[isFormatWord],[synonyms],[forbiddenWords],[description]");
                         continue;
                     }
                     String logical = record.get(0).trim();
                     String physical = record.get(1).trim();
-                    String domainName = record.get(2).trim();
-                    String desc = (record.size() > 3) ? record.get(3).trim() : "";
+                    String englishName = record.get(2).trim();
+                    
+                    String domainClassification = (record.size() > 3) ? record.get(3).trim() : "";
+                    Boolean isFormatWord = false;
+                    if (record.size() > 4 && !record.get(4).trim().isEmpty()) {
+                        String isFormatStr = record.get(4).trim().toLowerCase();
+                        isFormatWord = "true".equals(isFormatStr) || "y".equals(isFormatStr) || "1".equals(isFormatStr);
+                    }
+                    String synonyms = (record.size() > 5) ? record.get(5).trim() : "";
+                    String forbiddenWords = (record.size() > 6) ? record.get(6).trim() : "";
+                    String desc = (record.size() > 7) ? record.get(7).trim() : "";
 
-                    if (logical.isEmpty() || physical.isEmpty() || domainName.isEmpty()) {
-                        report.logFail(rowIndex, "Logical name, physical name, and domain reference cannot be empty");
+                    if (logical.isEmpty() || physical.isEmpty()) {
+                        report.logFail(rowIndex, "Logical name and physical abbreviation cannot be empty");
+                        continue;
+                    }
+                    if (Boolean.TRUE.equals(isFormatWord) && domainClassification.isEmpty()) {
+                        report.logFail(rowIndex, "Linked domain classification reference cannot be empty when isFormatWord is true");
                         continue;
                     }
 
@@ -467,10 +504,14 @@ public class StandardizationService {
                         continue;
                     }
 
-                    Domain d = mapper.findDomainByName(domainName);
-                    if (d == null) {
-                        report.logFail(rowIndex, "Linked Domain '" + domainName + "' does not exist");
-                        continue;
+                    UUID domainId = null;
+                    if (!domainClassification.isEmpty()) {
+                        Domain d = mapper.findFirstDomainByClassification(domainClassification);
+                        if (d == null) {
+                            report.logFail(rowIndex, "Linked Domain Classification '" + domainClassification + "' does not exist");
+                            continue;
+                        }
+                        domainId = d.getId();
                     }
 
                     if (mapper.findStandardWordByLogicalName(logical) != null) {
@@ -487,8 +528,12 @@ public class StandardizationService {
                     sw.setTenantId(UUID.fromString(TenantContext.getCurrentTenantId()));
                     sw.setLogicalName(logical);
                     sw.setPhysicalName(physical.toUpperCase());
-                    sw.setDomainId(d.getId());
-                    sw.setDescription(desc);
+                    sw.setEnglishName(englishName.isEmpty() ? null : englishName);
+                    sw.setDomainId(domainId);
+                    sw.setIsFormatWord(isFormatWord);
+                    sw.setSynonyms(synonyms.isEmpty() ? null : synonyms);
+                    sw.setForbiddenWords(forbiddenWords.isEmpty() ? null : forbiddenWords);
+                    sw.setDescription(desc.isEmpty() ? null : desc);
                     mapper.insertStandardWord(sw);
                     report.logSuccess(rowIndex, "Standard word '" + logical + "' imported successfully");
                 } catch (Exception ex) {
@@ -518,7 +563,7 @@ public class StandardizationService {
                 report.totalRows++;
                 try {
                     if (record.size() < 2) {
-                        report.logFail(rowIndex, "Insufficient columns. Expected: logicalName,physicalName,[description],[comma_separated_word_logicals]");
+                        report.logFail(rowIndex, "Insufficient columns. Expected: logicalName,physicalName,[description],[semicolon_separated_word_logicals]");
                         continue;
                     }
                     String logical = record.get(0).trim();
@@ -584,37 +629,47 @@ public class StandardizationService {
     }
 
     public String exportDomainsToCsv() {
-        StringBuilder sb = new StringBuilder("name,dataType,length,precisionVal,formatPattern,description\n");
+        StringBuilder sb = new StringBuilder("domainGroup,domainClassification,name,dataType,dataLength,decimalLength,storageFormat,expressionFormat,unit,allowedValues,description\n");
         List<Domain> list = mapper.findAllDomains();
         for (Domain d : list) {
-            sb.append(escapeCsv(d.getName())).append(",")
+            sb.append(escapeCsv(d.getDomainGroup())).append(",")
+              .append(escapeCsv(d.getDomainClassification())).append(",")
+              .append(escapeCsv(d.getName())).append(",")
               .append(escapeCsv(d.getDataType())).append(",")
-              .append(d.getLength() != null ? d.getLength() : "").append(",")
-              .append(d.getPrecisionVal() != null ? d.getPrecisionVal() : "").append(",")
-              .append(escapeCsv(d.getFormatPattern())).append(",")
+              .append(d.getDataLength() != null ? d.getDataLength() : "").append(",")
+              .append(d.getDecimalLength() != null ? d.getDecimalLength() : "").append(",")
+              .append(escapeCsv(d.getStorageFormat())).append(",")
+              .append(escapeCsv(d.getExpressionFormat())).append(",")
+              .append(escapeCsv(d.getUnit())).append(",")
+              .append(escapeCsv(d.getAllowedValues())).append(",")
               .append(escapeCsv(d.getDescription())).append("\n");
         }
         return sb.toString();
     }
 
     public String exportForbiddenWordsToCsv() {
-        StringBuilder sb = new StringBuilder("word,replacement,description\n");
+        StringBuilder sb = new StringBuilder("word,replacement,isUsed,description\n");
         List<ForbiddenWord> list = mapper.findAllForbiddenWords();
         for (ForbiddenWord fw : list) {
             sb.append(escapeCsv(fw.getWord())).append(",")
               .append(escapeCsv(fw.getReplacement())).append(",")
+              .append(fw.getIsUsed() != null ? fw.getIsUsed() : "true").append(",")
               .append(escapeCsv(fw.getDescription())).append("\n");
         }
         return sb.toString();
     }
 
     public String exportStandardWordsToCsv() {
-        StringBuilder sb = new StringBuilder("logicalName,physicalName,domainName,description\n");
+        StringBuilder sb = new StringBuilder("logicalName,physicalName,englishName,domainClassification,isFormatWord,synonyms,forbiddenWords,description\n");
         List<StandardWord> list = mapper.findAllStandardWords();
         for (StandardWord sw : list) {
             sb.append(escapeCsv(sw.getLogicalName())).append(",")
               .append(escapeCsv(sw.getPhysicalName())).append(",")
-              .append(escapeCsv(sw.getDomainName())).append(",")
+              .append(escapeCsv(sw.getEnglishName())).append(",")
+              .append(escapeCsv(sw.getDomainName())).append(",") // sw.domainName holds domainClassification retrieved from join
+              .append(sw.getIsFormatWord() != null ? sw.getIsFormatWord() : "false").append(",")
+              .append(escapeCsv(sw.getSynonyms())).append(",")
+              .append(escapeCsv(sw.getForbiddenWords())).append(",")
               .append(escapeCsv(sw.getDescription())).append("\n");
         }
         return sb.toString();

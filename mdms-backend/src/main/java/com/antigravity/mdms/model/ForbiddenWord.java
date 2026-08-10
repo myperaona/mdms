@@ -9,6 +9,7 @@ public class ForbiddenWord {
     private String word;
     private String replacement;
     private String description;
+    private Boolean isUsed = true;
     private Instant createdAt;
 
     // Getters and Setters
@@ -26,6 +27,9 @@ public class ForbiddenWord {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public Boolean getIsUsed() { return isUsed; }
+    public void setIsUsed(Boolean isUsed) { this.isUsed = isUsed; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

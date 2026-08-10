@@ -8,7 +8,11 @@ public class StandardWord {
     private UUID tenantId;
     private String logicalName;
     private String physicalName;
+    private String englishName;
     private UUID domainId;
+    private Boolean isFormatWord;
+    private String synonyms;
+    private String forbiddenWords;
     private String description;
     private Instant createdAt;
 
@@ -28,8 +32,20 @@ public class StandardWord {
     public String getPhysicalName() { return physicalName; }
     public void setPhysicalName(String physicalName) { this.physicalName = physicalName; }
 
+    public String getEnglishName() { return englishName; }
+    public void setEnglishName(String englishName) { this.englishName = englishName; }
+
     public UUID getDomainId() { return domainId; }
     public void setDomainId(UUID domainId) { this.domainId = domainId; }
+
+    public Boolean getIsFormatWord() { return isFormatWord; }
+    public void setIsFormatWord(Boolean isFormatWord) { this.isFormatWord = isFormatWord; }
+
+    public String getSynonyms() { return synonyms; }
+    public void setSynonyms(String synonyms) { this.synonyms = synonyms; }
+
+    public String getForbiddenWords() { return forbiddenWords; }
+    public void setForbiddenWords(String forbiddenWords) { this.forbiddenWords = forbiddenWords; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

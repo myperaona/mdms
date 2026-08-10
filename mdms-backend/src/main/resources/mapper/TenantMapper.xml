@@ -95,13 +95,19 @@
         CREATE TABLE IF NOT EXISTS ${schemaName}.domain (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
-            name VARCHAR(100) NOT NULL UNIQUE,
-            data_type VARCHAR(50) NOT NULL,
-            length INTEGER,
-            precision_val INTEGER,
-            format_pattern VARCHAR(100),
+            domain_group VARCHAR(100) NOT NULL,
+            domain_classification VARCHAR(100) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            data_type VARCHAR(50),
+            data_length INTEGER,
+            decimal_length INTEGER,
+            storage_format VARCHAR(100),
+            expression_format VARCHAR(100),
+            unit VARCHAR(50),
+            allowed_values VARCHAR(255),
             description TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (domain_group, domain_classification, name)
         )
     </update>
 
@@ -112,6 +118,7 @@
             word VARCHAR(100) NOT NULL UNIQUE,
             replacement VARCHAR(100),
             description TEXT,
+            is_used BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     </update>
@@ -122,7 +129,11 @@
             tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
             logical_name VARCHAR(100) NOT NULL UNIQUE,
             physical_name VARCHAR(100) NOT NULL UNIQUE,
-            domain_id UUID NOT NULL REFERENCES ${schemaName}.domain(id) ON DELETE RESTRICT,
+            english_name VARCHAR(100),
+            domain_id UUID REFERENCES ${schemaName}.domain(id) ON DELETE SET NULL,
+            is_format_word BOOLEAN DEFAULT FALSE,
+            synonyms VARCHAR(255),
+            forbidden_words VARCHAR(255),
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
@@ -136,8 +147,62 @@
             physical_name VARCHAR(150) NOT NULL UNIQUE,
             description TEXT,
             word_ids TEXT,
+            common_domain_name VARCHAR(100),
+            allowed_values VARCHAR(255),
+            storage_format VARCHAR(100),
+            expression_format VARCHAR(100),
+            admin_code_name VARCHAR(150),
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
+    </update>
+
+    <update id="upgradeStandardTermTable">
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS common_domain_name VARCHAR(100);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS allowed_values VARCHAR(255);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS storage_format VARCHAR(100);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS expression_format VARCHAR(100);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS admin_code_name VARCHAR(150);
+        ALTER TABLE ${schemaName}.forbidden_word ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT TRUE;
+    </update>
+
+    <update id="upgradeDomainTable">
+        -- Drop dependent tables cascade to allow complete replacement
+        DROP TABLE IF EXISTS ${schemaName}.standard_word CASCADE;
+        DROP TABLE IF EXISTS ${schemaName}.domain CASCADE;
+
+        -- Recreate domain table with new columns and unique composite index
+        CREATE TABLE ${schemaName}.domain (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            domain_group VARCHAR(100) NOT NULL,
+            domain_classification VARCHAR(100) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            data_type VARCHAR(50),
+            data_length INTEGER,
+            decimal_length INTEGER,
+            storage_format VARCHAR(100),
+            expression_format VARCHAR(100),
+            unit VARCHAR(50),
+            allowed_values VARCHAR(255),
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (domain_group, domain_classification, name)
+        );
+
+        -- Recreate standard_word table with format check, synonyms, and forbidden words
+        CREATE TABLE ${schemaName}.standard_word (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            logical_name VARCHAR(100) NOT NULL UNIQUE,
+            physical_name VARCHAR(100) NOT NULL UNIQUE,
+            english_name VARCHAR(100),
+            domain_id UUID REFERENCES ${schemaName}.domain(id) ON DELETE SET NULL,
+            is_format_word BOOLEAN DEFAULT FALSE,
+            synonyms VARCHAR(255),
+            forbidden_words VARCHAR(255),
+            description TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
     </update>
 
 </mapper>
