@@ -34,7 +34,6 @@ public class SchemaUpgradeRunner implements CommandLineRunner {
                         tenantMapper.createStandardWordTable(schema);
                         tenantMapper.createStandardTermTable(schema);
                         tenantMapper.upgradeStandardTermTable(schema);
-                        tenantMapper.upgradeDomainTable(schema);
                         log.info("Schema upgrades successful for tenant: {}", tenant.getName());
                     } catch (Exception e) {
                         log.error("Failed to upgrade schema for tenant " + tenant.getName() + ": " + e.getMessage(), e);
