@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -75,42 +76,63 @@ public class DataSourceService {
     }
 
     public boolean testJdbcConnection(String dbType, String host, int port, String databaseName, String username, String decryptedPassword) {
-        String url;
-        String driverClass = null;
-
-        if ("POSTGRESQL".equalsIgnoreCase(dbType)) {
-            url = String.format("jdbc:postgresql://%s:%d/%s", host, port, databaseName);
-            driverClass = "org.postgresql.Driver";
-        } else if ("MYSQL".equalsIgnoreCase(dbType)) {
-            url = String.format("jdbc:mysql://%s:%d/%s", host, port, databaseName);
-            driverClass = "com.mysql.cj.jdbc.Driver";
-        } else if ("ORACLE".equalsIgnoreCase(dbType)) {
-            url = String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, databaseName);
-            driverClass = "oracle.jdbc.OracleDriver";
-        } else if ("MSSQL".equalsIgnoreCase(dbType)) {
-            url = String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=true;trustServerCertificate=true", host, port, databaseName);
-            driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-        } else if ("TIBERO".equalsIgnoreCase(dbType)) {
-            url = String.format("jdbc:tibero:thin:@%s:%d:%s", host, port, databaseName);
-            driverClass = "com.tmax.tibero.jdbc.TbDriver";
-        } else {
-            return false;
+        List<String> hostsToTry = new ArrayList<>();
+        if (host != null && !host.trim().isEmpty()) {
+            hostsToTry.add(host.trim());
+        }
+        if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)) {
+            hostsToTry.add("host.docker.internal");
+        } else if ("host.docker.internal".equalsIgnoreCase(host)) {
+            hostsToTry.add("localhost");
         }
 
-        try {
-            if (driverClass != null) {
-                try {
-                    Class.forName(driverClass);
-                } catch (ClassNotFoundException ce) {
-                    log.warn("JDBC driver class {} not found in system classpath, relying on dynamically loaded drivers.", driverClass);
+        for (String targetHost : hostsToTry) {
+            String url = buildJdbcUrl(dbType, targetHost, port, databaseName);
+            String driverClass = getDriverClass(dbType);
+            if (url == null) return false;
+
+            try {
+                if (driverClass != null) {
+                    try {
+                        Class.forName(driverClass);
+                    } catch (ClassNotFoundException ce) {
+                        log.warn("JDBC driver class {} not found, using dynamic drivers", driverClass);
+                    }
                 }
+                try (Connection conn = DriverManager.getConnection(url, username, decryptedPassword)) {
+                    if (conn.isValid(5)) {
+                        return true;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("JDBC connection test attempt failed for {}: {}", targetHost, e.getMessage());
             }
-            try (Connection conn = DriverManager.getConnection(url, username, decryptedPassword)) {
-                return conn.isValid(5);
-            }
-        } catch (Exception e) {
-            log.error("JDBC connection test failed for {} database: {}", dbType, e.getMessage());
-            return false;
         }
+        log.error("JDBC connection test failed for {} database across all host targets: {}", dbType, hostsToTry);
+        return false;
+    }
+
+    public static String buildJdbcUrl(String dbType, String host, int port, String databaseName) {
+        if ("POSTGRESQL".equalsIgnoreCase(dbType)) {
+            return String.format("jdbc:postgresql://%s:%d/%s", host, port, databaseName);
+        } else if ("MYSQL".equalsIgnoreCase(dbType)) {
+            return String.format("jdbc:mysql://%s:%d/%s", host, port, databaseName);
+        } else if ("ORACLE".equalsIgnoreCase(dbType)) {
+            return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, databaseName);
+        } else if ("MSSQL".equalsIgnoreCase(dbType)) {
+            return String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=true;trustServerCertificate=true", host, port, databaseName);
+        } else if ("TIBERO".equalsIgnoreCase(dbType)) {
+            return String.format("jdbc:tibero:thin:@%s:%d:%s", host, port, databaseName);
+        }
+        return null;
+    }
+
+    public static String getDriverClass(String dbType) {
+        if ("POSTGRESQL".equalsIgnoreCase(dbType)) return "org.postgresql.Driver";
+        if ("MYSQL".equalsIgnoreCase(dbType)) return "com.mysql.cj.jdbc.Driver";
+        if ("ORACLE".equalsIgnoreCase(dbType)) return "oracle.jdbc.OracleDriver";
+        if ("MSSQL".equalsIgnoreCase(dbType)) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+        if ("TIBERO".equalsIgnoreCase(dbType)) return "com.tmax.tibero.jdbc.TbDriver";
+        return null;
     }
 }

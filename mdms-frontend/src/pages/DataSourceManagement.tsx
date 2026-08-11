@@ -122,7 +122,9 @@ export default function DataSourceManagement() {
 
     try {
       await request(`/datasources/${id}`, { method: 'DELETE' });
-      fetchDataSources();
+      // Immediately remove deleted item from local state so UI updates instantly
+      setDataSources(prev => prev.filter(ds => ds.id !== id));
+      await fetchDataSources();
     } catch (e: any) {
       alert(e.message || 'Failed to delete connection profile');
     }

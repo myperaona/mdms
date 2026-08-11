@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.antigravity.mdms.mapper.DatabaseDesignMapper">
+
+    <!-- === Design Session === -->
+    <select id="findAllDesignSessions" resultType="com.antigravity.mdms.model.DesignSession">
+        SELECT * FROM md_design ORDER BY created_at DESC
+    </select>
+
+    <select id="findDesignSessionById" resultType="com.antigravity.mdms.model.DesignSession">
+        SELECT * FROM md_design WHERE design_id = #{designId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertDesignSession" parameterType="com.antigravity.mdms.model.DesignSession">
+        INSERT INTO md_design (design_id, tenant_id, design_name, system_name, description, version, status, created_by, created_at, updated_at)
+        VALUES (COALESCE(#{designId, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{designName}, #{systemName}, #{description}, #{version}, COALESCE(#{status}, 'DRAFT'), #{createdBy}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateDesignSession" parameterType="com.antigravity.mdms.model.DesignSession">
+        UPDATE md_design
+        SET design_name = #{designName},
+            system_name = #{systemName},
+            description = #{description},
+            version = #{version},
+            status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE design_id = #{designId, jdbcType=OTHER}
+    </update>
+
+    <update id="updateDesignSessionStatus">
+        UPDATE md_design
+        SET status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE design_id = #{designId, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteDesignSession">
+        DELETE FROM md_design WHERE design_id = #{designId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Subject Area === -->
+    <select id="findSubjectAreasByDesignId" resultType="com.antigravity.mdms.model.SubjectArea">
+        SELECT sa.*, 
+               (SELECT COUNT(*) FROM md_subject_area_term sat WHERE sat.subject_area_id = sa.subject_area_id) AS termCount
+        FROM md_subject_area sa
+        WHERE sa.design_id = #{designId, jdbcType=OTHER}
+        ORDER BY sa.sort_order ASC, sa.subject_area_name ASC
+    </select>
+
+    <select id="findSubjectAreaById" resultType="com.antigravity.mdms.model.SubjectArea">
+        SELECT * FROM md_subject_area WHERE subject_area_id = #{subjectAreaId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertSubjectArea" parameterType="com.antigravity.mdms.model.SubjectArea">
+        INSERT INTO md_subject_area (subject_area_id, design_id, subject_area_name, subject_area_code, parent_subject_area_id, description, sort_order, use_yn)
+        VALUES (COALESCE(#{subjectAreaId, jdbcType=OTHER}, gen_random_uuid()), #{designId, jdbcType=OTHER}, #{subjectAreaName}, #{subjectAreaCode}, #{parentSubjectAreaId, jdbcType=OTHER}, #{description}, COALESCE(#{sortOrder}, 0), COALESCE(#{useYn}, 'Y'))
+    </insert>
+
+    <update id="updateSubjectArea" parameterType="com.antigravity.mdms.model.SubjectArea">
+        UPDATE md_subject_area
+        SET subject_area_name = #{subjectAreaName},
+            subject_area_code = #{subjectAreaCode},
+            parent_subject_area_id = #{parentSubjectAreaId, jdbcType=OTHER},
+            description = #{description},
+            sort_order = #{sortOrder},
+            use_yn = #{useYn}
+        WHERE subject_area_id = #{subjectAreaId, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteSubjectArea">
+        DELETE FROM md_subject_area WHERE subject_area_id = #{subjectAreaId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Subject Area Term Mapping === -->
+    <select id="findTermsBySubjectAreaId" resultType="com.antigravity.mdms.model.StandardTerm">
+        SELECT st.*
+        FROM standard_term st
+        JOIN md_subject_area_term sat ON st.id = sat.term_id
+        WHERE sat.subject_area_id = #{subjectAreaId, jdbcType=OTHER}
+        ORDER BY st.logical_name ASC
+    </select>
+
+    <insert id="insertSubjectAreaTermMapping">
+        INSERT INTO md_subject_area_term (mapping_id, subject_area_id, term_id, created_at, created_by)
+        VALUES (COALESCE(#{mappingId, jdbcType=OTHER}, gen_random_uuid()), #{subjectAreaId, jdbcType=OTHER}, #{termId, jdbcType=OTHER}, CURRENT_TIMESTAMP, #{createdBy})
+    </insert>
+
+    <delete id="deleteSubjectAreaTermMapping">
+        DELETE FROM md_subject_area_term 
+        WHERE subject_area_id = #{subjectAreaId, jdbcType=OTHER} 
+          AND term_id = #{termId, jdbcType=OTHER}
+    </delete>
+
+    <delete id="deleteSubjectAreaTermMappingsBySubjectAreaId">
+        DELETE FROM md_subject_area_term WHERE subject_area_id = #{subjectAreaId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Table Design === -->
+    <select id="findTablesByDesignId" resultType="com.antigravity.mdms.model.TableDesign">
+        SELECT td.*, sa.subject_area_name AS subjectAreaName,
+               (SELECT COUNT(*) FROM md_table_column tc WHERE tc.table_design_id = td.table_design_id) AS columnCount
+        FROM md_table_design td
+        LEFT JOIN md_subject_area sa ON td.subject_area_id = sa.subject_area_id
+        WHERE td.design_id = #{designId, jdbcType=OTHER}
+        ORDER BY td.table_physical_name ASC
+    </select>
+
+    <select id="findTableDesignById" resultType="com.antigravity.mdms.model.TableDesign">
+        SELECT td.*, sa.subject_area_name AS subjectAreaName
+        FROM md_table_design td
+        LEFT JOIN md_subject_area sa ON td.subject_area_id = sa.subject_area_id
+        WHERE td.table_design_id = #{tableDesignId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertTableDesign" parameterType="com.antigravity.mdms.model.TableDesign">
+        INSERT INTO md_table_design (table_design_id, design_id, subject_area_id, table_logic_name, table_physical_name, description, version, status, created_at, updated_at)
+        VALUES (COALESCE(#{tableDesignId, jdbcType=OTHER}, gen_random_uuid()), #{designId, jdbcType=OTHER}, #{subjectAreaId, jdbcType=OTHER}, #{tableLogicName}, #{tablePhysicalName}, #{description}, COALESCE(#{version}, 'v1.0'), COALESCE(#{status}, 'DRAFT'), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateTableDesign" parameterType="com.antigravity.mdms.model.TableDesign">
+        UPDATE md_table_design
+        SET subject_area_id = #{subjectAreaId, jdbcType=OTHER},
+            table_logic_name = #{tableLogicName},
+            table_physical_name = #{tablePhysicalName},
+            description = #{description},
+            version = #{version},
+            status = #{status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE table_design_id = #{tableDesignId, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteTableDesign">
+        DELETE FROM md_table_design WHERE table_design_id = #{tableDesignId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === Table Column === -->
+    <select id="findColumnsByTableDesignId" resultType="com.antigravity.mdms.model.TableColumn">
+        SELECT * FROM md_table_column 
+        WHERE table_design_id = #{tableDesignId, jdbcType=OTHER}
+        ORDER BY sort_order ASC, column_physical_name ASC
+    </select>
+
+    <select id="findColumnById" resultType="com.antigravity.mdms.model.TableColumn">
+        SELECT * FROM md_table_column WHERE column_id = #{columnId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertTableColumn" parameterType="com.antigravity.mdms.model.TableColumn">
+        INSERT INTO md_table_column (column_id, table_design_id, term_id, column_logic_name, column_physical_name, data_type, length, precision, scale, nullable_yn, default_value, pk_yn, fk_yn, unique_yn, sort_order, remark)
+        VALUES (COALESCE(#{columnId, jdbcType=OTHER}, gen_random_uuid()), #{tableDesignId, jdbcType=OTHER}, #{termId, jdbcType=OTHER}, #{columnLogicName}, #{columnPhysicalName}, #{dataType}, #{length}, #{precision}, #{scale}, COALESCE(#{nullableYn}, 'Y'), #{defaultValue}, COALESCE(#{pkYn}, 'N'), COALESCE(#{fkYn}, 'N'), COALESCE(#{uniqueYn}, 'N'), COALESCE(#{sortOrder}, 0), #{remark})
+    </insert>
+
+    <update id="updateTableColumn" parameterType="com.antigravity.mdms.model.TableColumn">
+        UPDATE md_table_column
+        SET term_id = #{termId, jdbcType=OTHER},
+            column_logic_name = #{columnLogicName},
+            column_physical_name = #{columnPhysicalName},
+            data_type = #{dataType},
+            length = #{length},
+            precision = #{precision},
+            scale = #{scale},
+            nullable_yn = #{nullableYn},
+            default_value = #{defaultValue},
+            pk_yn = #{pkYn},
+            fk_yn = #{fkYn},
+            unique_yn = #{uniqueYn},
+            sort_order = #{sortOrder},
+            remark = #{remark}
+        WHERE column_id = #{columnId, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteTableColumn">
+        DELETE FROM md_table_column WHERE column_id = #{columnId, jdbcType=OTHER}
+    </delete>
+
+    <delete id="deleteColumnsByTableDesignId">
+        DELETE FROM md_table_column WHERE table_design_id = #{tableDesignId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === ERD Entity & Relation === -->
+    <select id="findErdEntitiesByDesignId" resultType="com.antigravity.mdms.model.ErdEntity">
+        SELECT * FROM md_erd_entity WHERE design_id = #{designId, jdbcType=OTHER}
+    </select>
+
+    <insert id="upsertErdEntity" parameterType="com.antigravity.mdms.model.ErdEntity">
+        INSERT INTO md_erd_entity (entity_id, design_id, table_design_id, position_x, position_y, width, height)
+        VALUES (COALESCE(#{entityId, jdbcType=OTHER}, gen_random_uuid()), #{designId, jdbcType=OTHER}, #{tableDesignId, jdbcType=OTHER}, #{positionX}, #{positionY}, #{width}, #{height})
+        ON CONFLICT (entity_id) DO UPDATE 
+        SET position_x = EXCLUDED.position_x,
+            position_y = EXCLUDED.position_y,
+            width = EXCLUDED.width,
+            height = EXCLUDED.height
+    </insert>
+
+    <delete id="deleteErdEntity">
+        DELETE FROM md_erd_entity WHERE entity_id = #{entityId, jdbcType=OTHER}
+    </delete>
+
+    <select id="findErdRelationsByDesignId" resultType="com.antigravity.mdms.model.ErdRelation">
+        SELECT * FROM md_erd_relation WHERE design_id = #{designId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertErdRelation" parameterType="com.antigravity.mdms.model.ErdRelation">
+        INSERT INTO md_erd_relation (relation_id, design_id, from_table_id, to_table_id, from_column_id, to_column_id, relation_type, cardinality)
+        VALUES (COALESCE(#{relationId, jdbcType=OTHER}, gen_random_uuid()), #{designId, jdbcType=OTHER}, #{fromTableId, jdbcType=OTHER}, #{toTableId, jdbcType=OTHER}, #{fromColumnId, jdbcType=OTHER}, #{toColumnId, jdbcType=OTHER}, COALESCE(#{relationType}, 'IDENTIFYING'), COALESCE(#{cardinality}, '1:N'))
+    </insert>
+
+    <delete id="deleteErdRelation">
+        DELETE FROM md_erd_relation WHERE relation_id = #{relationId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === DB Connection === -->
+    <select id="findAllDbConnections" resultType="com.antigravity.mdms.model.DbConnection">
+        SELECT * FROM md_db_connection ORDER BY connection_name ASC
+    </select>
+
+    <select id="findDbConnectionById" resultType="com.antigravity.mdms.model.DbConnection">
+        SELECT * FROM md_db_connection WHERE connection_id = #{connectionId, jdbcType=OTHER}
+    </select>
+
+    <insert id="insertDbConnection" parameterType="com.antigravity.mdms.model.DbConnection">
+        INSERT INTO md_db_connection (connection_id, tenant_id, connection_name, db_type, host, port, db_name, schema_name, user_id, encrypted_password, use_yn, created_at)
+        VALUES (COALESCE(#{connectionId, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{connectionName}, #{dbType}, #{host}, #{port}, #{dbName}, #{schemaName}, #{userId}, #{encryptedPassword}, COALESCE(#{useYn}, 'Y'), CURRENT_TIMESTAMP)
+    </insert>
+
+    <update id="updateDbConnection" parameterType="com.antigravity.mdms.model.DbConnection">
+        UPDATE md_db_connection
+        SET connection_name = #{connectionName},
+            db_type = #{dbType},
+            host = #{host},
+            port = #{port},
+            db_name = #{dbName},
+            schema_name = #{schemaName},
+            user_id = #{userId},
+            encrypted_password = #{encryptedPassword},
+            use_yn = #{useYn}
+        WHERE connection_id = #{connectionId, jdbcType=OTHER}
+    </update>
+
+    <delete id="deleteDbConnection">
+        DELETE FROM md_db_connection WHERE connection_id = #{connectionId, jdbcType=OTHER}
+    </delete>
+
+    <!-- === DB Deploy Log === -->
+    <select id="findDeployLogsByDesignId" resultType="com.antigravity.mdms.model.DbDeployLog">
+        SELECT l.*, c.connection_name AS connectionName
+        FROM md_db_deploy_log l
+        LEFT JOIN md_db_connection c ON l.connection_id = c.connection_id
+        WHERE l.design_id = #{designId, jdbcType=OTHER}
+        ORDER BY l.executed_at DESC
+    </select>
+
+    <insert id="insertDeployLog" parameterType="com.antigravity.mdms.model.DbDeployLog">
+        INSERT INTO md_db_deploy_log (deploy_log_id, design_id, table_design_id, connection_id, sql_text, executed_at, executed_by, result_status, error_message)
+        VALUES (COALESCE(#{deployLogId, jdbcType=OTHER}, gen_random_uuid()), #{designId, jdbcType=OTHER}, #{tableDesignId, jdbcType=OTHER}, #{connectionId, jdbcType=OTHER}, #{sqlText}, CURRENT_TIMESTAMP, #{executedBy}, #{resultStatus}, #{errorMessage})
+    </insert>
+
+</mapper>

@@ -713,26 +713,34 @@ export default function StandardizationManagement() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="tab-menu" style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>
-        <button className={`tab-item ${activeTab === 'domains' ? 'active' : ''}`} onClick={() => { setActiveTab('domains'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '도메인 관리' : 'Domain Registry'}
-        </button>
-        <button className={`tab-item ${activeTab === 'forbidden' ? 'active' : ''}`} onClick={() => { setActiveTab('forbidden'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '금칙어(이음동어) 관리' : 'Forbidden Words(Synonyms)'}
-        </button>
-        <button className={`tab-item ${activeTab === 'words' ? 'active' : ''}`} onClick={() => { setActiveTab('words'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '표준단어 관리' : 'Standard Words'}
-        </button>
-        <button className={`tab-item ${activeTab === 'terms' ? 'active' : ''}`} onClick={() => { setActiveTab('terms'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '표준용어 관리' : 'Standard Terms'}
-        </button>
-        <button className={`tab-item ${activeTab === 'import' ? 'active' : ''}`} onClick={() => { setActiveTab('import'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '일괄 등록/반출' : 'Bulk CSV'}
-        </button>
-        <button className={`tab-item ${activeTab === 'report' ? 'active' : ''}`} onClick={() => { setActiveTab('report'); resetForms(); setShowForm(false); }}>
-          {locale === 'ko' ? '준수율 리포트' : 'Compliance Stats'}
-        </button>
+      {/* Tabs - Styled identical to Database Design module */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.75rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
+        {[
+          { id: 'domains', label: locale === 'ko' ? '도메인 관리' : 'Domain Registry' },
+          { id: 'forbidden', label: locale === 'ko' ? '금칙어(이음동어) 관리' : 'Forbidden Words(Synonyms)' },
+          { id: 'words', label: locale === 'ko' ? '표준단어 관리' : 'Standard Words' },
+          { id: 'terms', label: locale === 'ko' ? '표준용어 관리' : 'Standard Terms' },
+          { id: 'import', label: locale === 'ko' ? '일괄 등록/반출' : 'Bulk CSV' },
+          { id: 'report', label: locale === 'ko' ? '준수율 리포트' : 'Compliance Stats' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { setActiveTab(tab.id as any); resetForms(); setShowForm(false); }}
+            style={{
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.825rem',
+              fontWeight: activeTab === tab.id ? 700 : 500,
+              borderRadius: '4px',
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: activeTab === tab.id ? '#ffffff' : 'rgba(255,255,255,0.06)',
+              color: activeTab === tab.id ? '#0f172a' : '#cbd5e1',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Status Alerts */}

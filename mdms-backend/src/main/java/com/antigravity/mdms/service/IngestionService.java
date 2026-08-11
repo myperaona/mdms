@@ -59,39 +59,44 @@ public class IngestionService {
         persistenceService.saveInitialJob(job);
 
         String decryptedPassword = encryptionUtil.decrypt(ds.getPasswordEncrypted());
-        String url;
-        String driverClass = null;
 
-        if ("POSTGRESQL".equalsIgnoreCase(ds.getDbType())) {
-            url = String.format("jdbc:postgresql://%s:%d/%s", ds.getHost(), ds.getPort(), ds.getDatabaseName());
-            driverClass = "org.postgresql.Driver";
-        } else if ("MYSQL".equalsIgnoreCase(ds.getDbType())) {
-            url = String.format("jdbc:mysql://%s:%d/%s", ds.getHost(), ds.getPort(), ds.getDatabaseName());
-            driverClass = "com.mysql.cj.jdbc.Driver";
-        } else if ("ORACLE".equalsIgnoreCase(ds.getDbType())) {
-            url = String.format("jdbc:oracle:thin:@//%s:%d/%s", ds.getHost(), ds.getPort(), ds.getDatabaseName());
-            driverClass = "oracle.jdbc.OracleDriver";
-        } else if ("MSSQL".equalsIgnoreCase(ds.getDbType())) {
-            url = String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=true;trustServerCertificate=true", ds.getHost(), ds.getPort(), ds.getDatabaseName());
-            driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-        } else if ("TIBERO".equalsIgnoreCase(ds.getDbType())) {
-            url = String.format("jdbc:tibero:thin:@%s:%d:%s", ds.getHost(), ds.getPort(), ds.getDatabaseName());
-            driverClass = "com.tmax.tibero.jdbc.TbDriver";
-        } else {
-            persistenceService.updateJobStatus(job, "FAILED", "Unsupported database type: " + ds.getDbType(), dataSourceId, "ERROR");
+        List<String> hostsToTry = new ArrayList<>();
+        if (ds.getHost() != null && !ds.getHost().trim().isEmpty()) {
+            hostsToTry.add(ds.getHost().trim());
+        }
+        if ("localhost".equalsIgnoreCase(ds.getHost()) || "127.0.0.1".equals(ds.getHost())) {
+            hostsToTry.add("host.docker.internal");
+        } else if ("host.docker.internal".equalsIgnoreCase(ds.getHost())) {
+            hostsToTry.add("localhost");
+        }
+
+        Connection conn = null;
+        for (String targetHost : hostsToTry) {
+            String url = DataSourceService.buildJdbcUrl(ds.getDbType(), targetHost, ds.getPort(), ds.getDatabaseName());
+            String driverClass = DataSourceService.getDriverClass(ds.getDbType());
+            if (url == null) continue;
+
+            try {
+                if (driverClass != null) {
+                    try { Class.forName(driverClass); } catch (Exception ignored) {}
+                }
+                conn = DriverManager.getConnection(url, ds.getUsername(), decryptedPassword);
+                if (conn != null) {
+                    log.info("Successfully established ingestion JDBC connection using target host: {}", targetHost);
+                    break;
+                }
+            } catch (Exception e) {
+                log.warn("Ingestion JDBC connection attempt failed for host {}: {}", targetHost, e.getMessage());
+            }
+        }
+
+        if (conn == null) {
+            persistenceService.updateJobStatus(job, "FAILED", "Failed to connect to database across host targets: " + hostsToTry, dataSourceId, "ERROR");
             return;
         }
 
-        try {
-            if (driverClass != null) {
-                Class.forName(driverClass);
-            }
-        } catch (Exception e) {
-            log.warn("Could not explicitly load driver class: {} - attempting connection anyway", driverClass);
-        }
-
-        try (Connection conn = DriverManager.getConnection(url, ds.getUsername(), decryptedPassword)) {
-            DatabaseMetaData metaData = conn.getMetaData();
+        try (Connection dbConn = conn) {
+            DatabaseMetaData metaData = dbConn.getMetaData();
             
             List<MetadataSchema> schemas = new ArrayList<>();
             List<MetadataTable> tables = new ArrayList<>();
