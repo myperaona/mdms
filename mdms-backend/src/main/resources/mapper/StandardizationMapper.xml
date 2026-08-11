@@ -30,8 +30,8 @@
     </select>
 
     <insert id="insertDomain" parameterType="com.antigravity.mdms.model.Domain">
-        INSERT INTO domain (id, tenant_id, domain_group, domain_classification, name, data_type, data_length, decimal_length, storage_format, expression_format, unit, allowed_values, description, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{domainGroup}, #{domainClassification}, #{name}, #{dataType}, #{dataLength}, #{decimalLength}, #{storageFormat}, #{expressionFormat}, #{unit}, #{allowedValues}, #{description}, CURRENT_TIMESTAMP)
+        INSERT INTO domain (id, tenant_id, domain_group, domain_classification, name, data_type, data_length, decimal_length, storage_format, expression_format, unit, allowed_values, description, enactment_order, revision_classification, revision_item, revision_reason, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{domainGroup}, #{domainClassification}, #{name}, #{dataType}, #{dataLength}, #{decimalLength}, #{storageFormat}, #{expressionFormat}, #{unit}, #{allowedValues}, #{description}, #{enactmentOrder}, #{revisionClassification}, #{revisionItem}, #{revisionReason}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateDomain" parameterType="com.antigravity.mdms.model.Domain">
@@ -46,7 +46,11 @@
             expression_format = #{expressionFormat},
             unit = #{unit},
             allowed_values = #{allowedValues},
-            description = #{description}
+            description = #{description},
+            enactment_order = #{enactmentOrder},
+            revision_classification = #{revisionClassification},
+            revision_item = #{revisionItem},
+            revision_reason = #{revisionReason}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
 
@@ -115,8 +119,8 @@
     </select>
 
     <insert id="insertStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
-        INSERT INTO standard_word (id, tenant_id, logical_name, physical_name, english_name, domain_id, is_format_word, synonyms, forbidden_words, description, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{englishName}, #{domainId, jdbcType=OTHER}, #{isFormatWord}, #{synonyms}, #{forbiddenWords}, #{description}, CURRENT_TIMESTAMP)
+        INSERT INTO standard_word (id, tenant_id, logical_name, physical_name, english_name, domain_id, is_format_word, synonyms, forbidden_words, description, enactment_order, revision_classification, revision_item, revision_reason, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{englishName}, #{domainId, jdbcType=OTHER}, #{isFormatWord}, #{synonyms}, #{forbiddenWords}, #{description}, #{enactmentOrder}, #{revisionClassification}, #{revisionItem}, #{revisionReason}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateStandardWord" parameterType="com.antigravity.mdms.model.StandardWord">
@@ -128,7 +132,11 @@
             is_format_word = #{isFormatWord},
             synonyms = #{synonyms},
             forbidden_words = #{forbiddenWords},
-            description = #{description}
+            description = #{description},
+            enactment_order = #{enactmentOrder},
+            revision_classification = #{revisionClassification},
+            revision_item = #{revisionItem},
+            revision_reason = #{revisionReason}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
 
@@ -154,8 +162,8 @@
     </select>
 
     <insert id="insertStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
-        INSERT INTO standard_term (id, tenant_id, logical_name, physical_name, description, word_ids, common_domain_name, allowed_values, storage_format, expression_format, admin_code_name, created_at)
-        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{description}, #{wordIds}, #{commonDomainName}, #{allowedValues}, #{storageFormat}, #{expressionFormat}, #{adminCodeName}, CURRENT_TIMESTAMP)
+        INSERT INTO standard_term (id, tenant_id, logical_name, physical_name, description, word_ids, common_domain_name, allowed_values, storage_format, expression_format, admin_code_name, admin_agency_name, forbidden_words, enactment_order, revision_classification, revision_item, revision_reason, created_at)
+        VALUES (COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), #{tenantId, jdbcType=OTHER}, #{logicalName}, #{physicalName}, #{description}, #{wordIds}, #{commonDomainName}, #{allowedValues}, #{storageFormat}, #{expressionFormat}, #{adminCodeName}, #{adminAgencyName}, #{forbiddenWords}, #{enactmentOrder}, #{revisionClassification}, #{revisionItem}, #{revisionReason}, CURRENT_TIMESTAMP)
     </insert>
 
     <update id="updateStandardTerm" parameterType="com.antigravity.mdms.model.StandardTerm">
@@ -168,7 +176,13 @@
             allowed_values = #{allowedValues},
             storage_format = #{storageFormat},
             expression_format = #{expressionFormat},
-            admin_code_name = #{adminCodeName}
+            admin_code_name = #{adminCodeName},
+            admin_agency_name = #{adminAgencyName},
+            forbidden_words = #{forbiddenWords},
+            enactment_order = #{enactmentOrder},
+            revision_classification = #{revisionClassification},
+            revision_item = #{revisionItem},
+            revision_reason = #{revisionReason}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
 
@@ -183,6 +197,31 @@
     <select id="countCompliantColumns" resultType="int">
         SELECT count(*) FROM metadata_column 
         WHERE UPPER(name) IN (SELECT UPPER(physical_name) FROM standard_term)
+    </select>
+
+    <select id="findReportColumns" resultType="map">
+        SELECT 
+            c.id AS "columnId",
+            c.name AS "columnName",
+            c.data_type AS "columnDataType",
+            t.name AS "tableName",
+            s.name AS "schemaName",
+            ds.name AS "datasourceName",
+            s.id AS "schemaId",
+            ds.id AS "datasourceId"
+        FROM metadata_column c
+        JOIN metadata_table t ON c.table_id = t.id
+        JOIN metadata_schema s ON t.schema_id = s.id
+        JOIN data_source ds ON s.data_source_id = ds.id
+        <where>
+            <if test="dataSourceId != null">
+                ds.id = #{dataSourceId, jdbcType=OTHER}
+            </if>
+            <if test="schemaId != null">
+                AND s.id = #{schemaId, jdbcType=OTHER}
+            </if>
+        </where>
+        ORDER BY ds.name ASC, s.name ASC, t.name ASC, c.name ASC
     </select>
 
 </mapper>

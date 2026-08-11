@@ -17,6 +17,10 @@ public class Domain {
     private String unit;
     private String allowedValues;
     private String description;
+    private String enactmentOrder;
+    private String revisionClassification;
+    private String revisionItem;
+    private String revisionReason;
     private Instant createdAt;
 
     // Getters and Setters
@@ -58,6 +62,18 @@ public class Domain {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getEnactmentOrder() { return enactmentOrder; }
+    public void setEnactmentOrder(String enactmentOrder) { this.enactmentOrder = enactmentOrder; }
+
+    public String getRevisionClassification() { return revisionClassification; }
+    public void setRevisionClassification(String revisionClassification) { this.revisionClassification = revisionClassification; }
+
+    public String getRevisionItem() { return revisionItem; }
+    public void setRevisionItem(String revisionItem) { this.revisionItem = revisionItem; }
+
+    public String getRevisionReason() { return revisionReason; }
+    public void setRevisionReason(String revisionReason) { this.revisionReason = revisionReason; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

@@ -10,10 +10,14 @@ public class StandardWord {
     private String physicalName;
     private String englishName;
     private UUID domainId;
-    private Boolean isFormatWord;
+    private String isFormatWord;
     private String synonyms;
     private String forbiddenWords;
     private String description;
+    private String enactmentOrder;
+    private String revisionClassification;
+    private String revisionItem;
+    private String revisionReason;
     private Instant createdAt;
 
     // Join helper attribute
@@ -38,8 +42,8 @@ public class StandardWord {
     public UUID getDomainId() { return domainId; }
     public void setDomainId(UUID domainId) { this.domainId = domainId; }
 
-    public Boolean getIsFormatWord() { return isFormatWord; }
-    public void setIsFormatWord(Boolean isFormatWord) { this.isFormatWord = isFormatWord; }
+    public String getIsFormatWord() { return isFormatWord; }
+    public void setIsFormatWord(String isFormatWord) { this.isFormatWord = isFormatWord; }
 
     public String getSynonyms() { return synonyms; }
     public void setSynonyms(String synonyms) { this.synonyms = synonyms; }
@@ -49,6 +53,18 @@ public class StandardWord {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getEnactmentOrder() { return enactmentOrder; }
+    public void setEnactmentOrder(String enactmentOrder) { this.enactmentOrder = enactmentOrder; }
+
+    public String getRevisionClassification() { return revisionClassification; }
+    public void setRevisionClassification(String revisionClassification) { this.revisionClassification = revisionClassification; }
+
+    public String getRevisionItem() { return revisionItem; }
+    public void setRevisionItem(String revisionItem) { this.revisionItem = revisionItem; }
+
+    public String getRevisionReason() { return revisionReason; }
+    public void setRevisionReason(String revisionReason) { this.revisionReason = revisionReason; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

@@ -51,4 +51,5 @@ public interface StandardizationMapper {
 
     int countTotalColumns();
     int countCompliantColumns();
+    List<java.util.Map<String, Object>> findReportColumns(@Param("dataSourceId") UUID dataSourceId, @Param("schemaId") UUID schemaId);
 }

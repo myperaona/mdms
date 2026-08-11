@@ -12,12 +12,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
+    private static final Pattern SAFE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_\\-]{2,50}$");
 
     private final UserService userService;
     private final TenantService tenantService;
@@ -34,33 +39,56 @@ public class AuthController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    private static ResponseEntity<?> badRequest(String message) {
+        return ResponseEntity.badRequest().body(Collections.singletonMap("error", message));
+    }
+
     @PostMapping("/tenant/register")
     public ResponseEntity<?> registerTenant(@RequestBody TenantRegisterRequest req) {
+        // Input validation
+        if (req.getTenantName() == null || !SAFE_NAME_PATTERN.matcher(req.getTenantName()).matches()) {
+            return badRequest("Tenant name must be 2-50 characters, alphanumeric with underscores/hyphens only");
+        }
+        if (req.getUsername() == null || !SAFE_NAME_PATTERN.matcher(req.getUsername()).matches()) {
+            return badRequest("Username must be 2-50 characters, alphanumeric with underscores/hyphens only");
+        }
+        if (req.getEmail() == null || !EMAIL_PATTERN.matcher(req.getEmail()).matches()) {
+            return badRequest("Invalid email format");
+        }
+        if (req.getPassword() == null || req.getPassword().length() < 6 || req.getPassword().length() > 100) {
+            return badRequest("Password must be between 6 and 100 characters");
+        }
         try {
             // Register the tenant and create their dedicated schema
             Tenant tenant = tenantService.registerTenant(req.getTenantName());
             // Create the first admin user under this tenant
             AppUser user = userService.registerUser(tenant.getId(), req.getUsername(), req.getEmail(), req.getPassword());
             
-            Map<String, Object> resp = new HashMap<>();
+            Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("success", true);
             resp.put("tenant", tenant.getName());
             resp.put("username", user.getUsername());
             return ResponseEntity.ok(resp);
         } catch (Exception e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest req) {
+        // Input validation to avoid unnecessary DB lookups
+        if (req.getUsername() == null || req.getUsername().isBlank() || req.getUsername().length() > 50) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "Invalid username or password"));
+        }
+        if (req.getPassword() == null || req.getPassword().isBlank() || req.getPassword().length() > 100) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "Invalid username or password"));
+        }
         AppUser user = userService.findByUsername(req.getUsername());
         if (user == null || !passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", "Invalid username or password");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "Invalid username or password"));
         }
 
         Tenant tenant = tenantService.getTenantById(user.getTenantId());
@@ -76,7 +104,7 @@ public class AuthController {
                 false
             );
             
-            Map<String, Object> resp = new HashMap<>();
+            Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("token", preAuthToken);
             resp.put("mfaRequired", true);
             resp.put("username", user.getUsername());
@@ -91,7 +119,7 @@ public class AuthController {
                 true
             );
             
-            Map<String, Object> resp = new HashMap<>();
+            Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("token", token);
             resp.put("mfaRequired", false);
             resp.put("username", user.getUsername());
@@ -118,7 +146,7 @@ public class AuthController {
         // Store secret temporarily but don't enable yet until verification completes
         userService.enableMfa(user.getId(), secret);
 
-        Map<String, String> resp = new HashMap<>();
+        Map<String, String> resp = new LinkedHashMap<>();
         resp.put("secret", secret);
         resp.put("qrCodeUrl", qrUrl);
         return ResponseEntity.ok(resp);
@@ -127,6 +155,11 @@ public class AuthController {
     @PostMapping("/mfa/verify")
     public ResponseEntity<?> verifyMfa(@RequestBody Map<String, String> payload) {
         String code = payload.get("code");
+        // Validate MFA code format (must be 6-digit numeric)
+        if (code == null || !code.matches("^\\d{6}$")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "Invalid MFA verification code format"));
+        }
         String username = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         AppUser user = userService.findByUsername(username);
         if (user == null) {
@@ -135,9 +168,8 @@ public class AuthController {
 
         boolean valid = mfaService.verifyCode(user.getMfaSecret(), code);
         if (!valid) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", "Invalid MFA verification code");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(err);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "Invalid MFA verification code"));
         }
 
         Tenant tenant = tenantService.getTenantById(user.getTenantId());
@@ -152,7 +184,7 @@ public class AuthController {
             true
         );
 
-        Map<String, Object> resp = new HashMap<>();
+        Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("token", token);
         resp.put("username", user.getUsername());
         resp.put("tenantName", tenant != null ? tenant.getName() : "System");

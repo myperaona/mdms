@@ -1,4 +1,4 @@
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8080/api`;
+const API_BASE = '/api';
 
 function getHeaders() {
   const token = localStorage.getItem('mdms_token');

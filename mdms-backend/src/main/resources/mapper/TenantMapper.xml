@@ -106,6 +106,10 @@
             unit VARCHAR(50),
             allowed_values VARCHAR(255),
             description TEXT,
+            enactment_order VARCHAR(50),
+            revision_classification VARCHAR(100),
+            revision_item VARCHAR(255),
+            revision_reason TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (domain_group, domain_classification, name)
         )
@@ -131,10 +135,14 @@
             physical_name VARCHAR(100) NOT NULL UNIQUE,
             english_name VARCHAR(100),
             domain_id UUID REFERENCES ${schemaName}.domain(id) ON DELETE SET NULL,
-            is_format_word BOOLEAN DEFAULT FALSE,
+            is_format_word VARCHAR(1) DEFAULT 'N',
             synonyms VARCHAR(255),
             forbidden_words VARCHAR(255),
             description TEXT,
+            enactment_order VARCHAR(50),
+            revision_classification VARCHAR(100),
+            revision_item VARCHAR(255),
+            revision_reason TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     </update>
@@ -152,6 +160,12 @@
             storage_format VARCHAR(100),
             expression_format VARCHAR(100),
             admin_code_name VARCHAR(150),
+            admin_agency_name VARCHAR(150),
+            forbidden_words VARCHAR(255),
+            enactment_order VARCHAR(50),
+            revision_classification VARCHAR(100),
+            revision_item VARCHAR(255),
+            revision_reason TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
     </update>
@@ -163,6 +177,41 @@
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS expression_format VARCHAR(100);
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS admin_code_name VARCHAR(150);
         ALTER TABLE ${schemaName}.forbidden_word ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT TRUE;
+
+        -- Upgrade domain table for new columns
+        ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS enactment_order VARCHAR(50);
+        ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS revision_classification VARCHAR(100);
+        ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS revision_item VARCHAR(255);
+        ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS revision_reason TEXT;
+
+        -- Upgrade standard_word table for new columns and datatype conversion
+        ALTER TABLE ${schemaName}.standard_word ADD COLUMN IF NOT EXISTS enactment_order VARCHAR(50);
+        ALTER TABLE ${schemaName}.standard_word ADD COLUMN IF NOT EXISTS revision_classification VARCHAR(100);
+        ALTER TABLE ${schemaName}.standard_word ADD COLUMN IF NOT EXISTS revision_item VARCHAR(255);
+        ALTER TABLE ${schemaName}.standard_word ADD COLUMN IF NOT EXISTS revision_reason TEXT;
+
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 
+                FROM information_schema.columns 
+                WHERE table_schema = '${schemaName}' 
+                  AND table_name = 'standard_word' 
+                  AND column_name = 'is_format_word' 
+                  AND data_type = 'boolean'
+            ) THEN
+                ALTER TABLE ${schemaName}.standard_word ALTER COLUMN is_format_word TYPE VARCHAR(1) USING (CASE WHEN is_format_word THEN 'Y' ELSE 'N' END);
+                ALTER TABLE ${schemaName}.standard_word ALTER COLUMN is_format_word SET DEFAULT 'N';
+            END IF;
+        END $$;
+
+        -- Upgrade standard_term table for new columns
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS admin_agency_name VARCHAR(150);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS forbidden_words VARCHAR(255);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS enactment_order VARCHAR(50);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS revision_classification VARCHAR(100);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS revision_item VARCHAR(255);
+        ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS revision_reason TEXT;
     </update>
 
     <update id="upgradeDomainTable">

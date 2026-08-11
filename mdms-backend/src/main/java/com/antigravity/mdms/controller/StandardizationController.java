@@ -11,8 +11,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +26,15 @@ public class StandardizationController {
 
     public StandardizationController(StandardizationService service) {
         this.service = service;
+    }
+
+    // --- Internal Helpers ---
+    private static ResponseEntity<?> badRequest(String message) {
+        return ResponseEntity.badRequest().body(Collections.singletonMap("error", message));
+    }
+
+    private static ResponseEntity<?> successResponse() {
+        return ResponseEntity.ok(Collections.singletonMap("success", true));
     }
 
     // --- Domain Operations ---
@@ -42,18 +52,14 @@ public class StandardizationController {
                 return ResponseEntity.ok(service.updateDomain(domain));
             }
         } catch (IllegalArgumentException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
     @DeleteMapping("/domains/{id}")
     public ResponseEntity<?> deleteDomain(@PathVariable UUID id) {
         service.deleteDomain(id);
-        Map<String, Boolean> resp = new HashMap<>();
-        resp.put("success", true);
-        return ResponseEntity.ok(resp);
+        return successResponse();
     }
 
     // --- Forbidden Word Operations ---
@@ -71,18 +77,14 @@ public class StandardizationController {
                 return ResponseEntity.ok(service.updateForbiddenWord(word));
             }
         } catch (IllegalArgumentException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
     @DeleteMapping("/forbidden-words/{id}")
     public ResponseEntity<?> deleteForbiddenWord(@PathVariable UUID id) {
         service.deleteForbiddenWord(id);
-        Map<String, Boolean> resp = new HashMap<>();
-        resp.put("success", true);
-        return ResponseEntity.ok(resp);
+        return successResponse();
     }
 
     // --- Standard Word Operations ---
@@ -100,18 +102,14 @@ public class StandardizationController {
                 return ResponseEntity.ok(service.updateStandardWord(word));
             }
         } catch (IllegalArgumentException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
     @DeleteMapping("/words/{id}")
     public ResponseEntity<?> deleteStandardWord(@PathVariable UUID id) {
         service.deleteStandardWord(id);
-        Map<String, Boolean> resp = new HashMap<>();
-        resp.put("success", true);
-        return ResponseEntity.ok(resp);
+        return successResponse();
     }
 
     // --- Standard Term Operations ---
@@ -129,18 +127,14 @@ public class StandardizationController {
                 return ResponseEntity.ok(service.updateStandardTerm(term));
             }
         } catch (IllegalArgumentException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
     @DeleteMapping("/terms/{id}")
     public ResponseEntity<?> deleteStandardTerm(@PathVariable UUID id) {
         service.deleteStandardTerm(id);
-        Map<String, Boolean> resp = new HashMap<>();
-        resp.put("success", true);
-        return ResponseEntity.ok(resp);
+        return successResponse();
     }
 
     @PostMapping("/terms/assemble")
@@ -148,9 +142,7 @@ public class StandardizationController {
         try {
             return ResponseEntity.ok(service.assembleTerm(wordIds));
         } catch (IllegalArgumentException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(err);
+            return badRequest(e.getMessage());
         }
     }
 
@@ -158,9 +150,10 @@ public class StandardizationController {
     @PostMapping("/import/{type}")
     public ResponseEntity<?> importCsv(@PathVariable String type, @RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", "CSV file is empty");
-            return ResponseEntity.badRequest().body(err);
+            return badRequest("CSV file is empty");
+        }
+        if (file.getSize() > StandardizationService.MAX_CSV_SIZE_BYTES) {
+            return badRequest("CSV file exceeds maximum allowed size of 10 MB");
         }
         try {
             String csvData = new String(file.getBytes(), StandardCharsets.UTF_8);
@@ -179,33 +172,35 @@ public class StandardizationController {
                     report = service.importStandardTerms(csvData);
                     break;
                 default:
-                    Map<String, String> err = new HashMap<>();
-                    err.put("error", "Invalid import type");
-                    return ResponseEntity.badRequest().body(err);
+                    return badRequest("Invalid import type: " + type);
             }
             return ResponseEntity.ok(report);
         } catch (IOException e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", "Failed to process uploaded file: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(err);
+            return ResponseEntity.internalServerError()
+                .body(Collections.singletonMap("error", "Failed to process uploaded file: " + e.getMessage()));
         }
     }
 
     @GetMapping("/export/{type}")
     public void exportCsv(@PathVariable String type, HttpServletResponse response) throws IOException {
-        String csvData = "";
+        String csvData;
+        String filename;
         switch (type.toLowerCase()) {
             case "domains":
                 csvData = service.exportDomainsToCsv();
+                filename = "domains_export.csv";
                 break;
             case "forbidden-words":
                 csvData = service.exportForbiddenWordsToCsv();
+                filename = "forbidden_words_export.csv";
                 break;
             case "words":
                 csvData = service.exportStandardWordsToCsv();
+                filename = "standard_words_export.csv";
                 break;
             case "terms":
                 csvData = service.exportStandardTermsToCsv();
+                filename = "standard_terms_export.csv";
                 break;
             default:
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid export type");
@@ -213,16 +208,19 @@ public class StandardizationController {
         }
         
         response.setContentType("text/csv; charset=UTF-8");
-        response.setHeader("Content-Disposition", "attachment; filename=" + type + "_export.csv");
+        // RFC 6266 compliant Content-Disposition header with UTF-8 filename encoding
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodedFilename);
         // Ensure UTF-8 BOM is written so Excel displays Korean correctly
         response.getOutputStream().write(new byte[]{(byte)0xEF, (byte)0xBB, (byte)0xBF});
         response.getOutputStream().write(csvData.getBytes(StandardCharsets.UTF_8));
         response.getOutputStream().flush();
     }
 
-    // --- Report operations ---
     @GetMapping("/report")
-    public ResponseEntity<?> getReport() {
-        return ResponseEntity.ok(service.getStandardizationReport());
+    public ResponseEntity<?> getReport(
+            @RequestParam(value = "dataSourceId", required = false) UUID dataSourceId,
+            @RequestParam(value = "schemaId", required = false) UUID schemaId) {
+        return ResponseEntity.ok(service.getStandardizationReport(dataSourceId, schemaId));
     }
 }

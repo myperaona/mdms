@@ -15,6 +15,12 @@ public class StandardTerm {
     private String storageFormat;
     private String expressionFormat;
     private String adminCodeName;
+    private String adminAgencyName;
+    private String forbiddenWords;
+    private String enactmentOrder;
+    private String revisionClassification;
+    private String revisionItem;
+    private String revisionReason;
     private Instant createdAt;
 
     // Getters and Setters
@@ -50,6 +56,24 @@ public class StandardTerm {
 
     public String getAdminCodeName() { return adminCodeName; }
     public void setAdminCodeName(String adminCodeName) { this.adminCodeName = adminCodeName; }
+
+    public String getAdminAgencyName() { return adminAgencyName; }
+    public void setAdminAgencyName(String adminAgencyName) { this.adminAgencyName = adminAgencyName; }
+
+    public String getForbiddenWords() { return forbiddenWords; }
+    public void setForbiddenWords(String forbiddenWords) { this.forbiddenWords = forbiddenWords; }
+
+    public String getEnactmentOrder() { return enactmentOrder; }
+    public void setEnactmentOrder(String enactmentOrder) { this.enactmentOrder = enactmentOrder; }
+
+    public String getRevisionClassification() { return revisionClassification; }
+    public void setRevisionClassification(String revisionClassification) { this.revisionClassification = revisionClassification; }
+
+    public String getRevisionItem() { return revisionItem; }
+    public void setRevisionItem(String revisionItem) { this.revisionItem = revisionItem; }
+
+    public String getRevisionReason() { return revisionReason; }
+    public void setRevisionReason(String revisionReason) { this.revisionReason = revisionReason; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
