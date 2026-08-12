@@ -25,17 +25,19 @@ public class IngestionService {
     private final DataSourceMapper dataSourceMapper;
     private final EncryptionUtil encryptionUtil;
     private final MetadataPersistenceService persistenceService;
+    private final JdbcConnectionProvider jdbcConnectionProvider;
 
     public IngestionService(DataSourceMapper dataSourceMapper, EncryptionUtil encryptionUtil, 
-                            MetadataPersistenceService persistenceService) {
+                            MetadataPersistenceService persistenceService,
+                            JdbcConnectionProvider jdbcConnectionProvider) {
         this.dataSourceMapper = dataSourceMapper;
         this.encryptionUtil = encryptionUtil;
         this.persistenceService = persistenceService;
+        this.jdbcConnectionProvider = jdbcConnectionProvider;
     }
 
     @Async
     public void runIngestionAsync(UUID dataSourceId, String tenantSchemaName, String tenantId) {
-        // Set tenant context for this background thread
         TenantContext.setCurrentTenantSchema(tenantSchemaName);
         TenantContext.setCurrentTenantId(tenantId);
         try {
@@ -59,39 +61,14 @@ public class IngestionService {
         persistenceService.saveInitialJob(job);
 
         String decryptedPassword = encryptionUtil.decrypt(ds.getPasswordEncrypted());
-
-        List<String> hostsToTry = new ArrayList<>();
-        if (ds.getHost() != null && !ds.getHost().trim().isEmpty()) {
-            hostsToTry.add(ds.getHost().trim());
-        }
-        if ("localhost".equalsIgnoreCase(ds.getHost()) || "127.0.0.1".equals(ds.getHost())) {
-            hostsToTry.add("host.docker.internal");
-        } else if ("host.docker.internal".equalsIgnoreCase(ds.getHost())) {
-            hostsToTry.add("localhost");
-        }
+        String url = DataSourceService.buildJdbcUrl(ds.getDbType(), ds.getHost(), ds.getPort(), ds.getDatabaseName());
 
         Connection conn = null;
-        for (String targetHost : hostsToTry) {
-            String url = DataSourceService.buildJdbcUrl(ds.getDbType(), targetHost, ds.getPort(), ds.getDatabaseName());
-            String driverClass = DataSourceService.getDriverClass(ds.getDbType());
-            if (url == null) continue;
-
-            try {
-                if (driverClass != null) {
-                    try { Class.forName(driverClass); } catch (Exception ignored) {}
-                }
-                conn = DriverManager.getConnection(url, ds.getUsername(), decryptedPassword);
-                if (conn != null) {
-                    log.info("Successfully established ingestion JDBC connection using target host: {}", targetHost);
-                    break;
-                }
-            } catch (Exception e) {
-                log.warn("Ingestion JDBC connection attempt failed for host {}: {}", targetHost, e.getMessage());
-            }
-        }
-
-        if (conn == null) {
-            persistenceService.updateJobStatus(job, "FAILED", "Failed to connect to database across host targets: " + hostsToTry, dataSourceId, "ERROR");
+        try {
+            conn = jdbcConnectionProvider.createConnection(ds.getDbType(), url, ds.getUsername(), decryptedPassword);
+        } catch (Exception e) {
+            log.error("Ingestion connection failed", e);
+            persistenceService.updateJobStatus(job, "FAILED", "Failed to connect to database: " + e.getMessage(), dataSourceId, "ERROR");
             return;
         }
 
@@ -165,6 +142,10 @@ public class IngestionService {
                             while (rsCols.next()) {
                                 String cName = rsCols.getString("COLUMN_NAME");
                                 String cType = rsCols.getString("TYPE_NAME");
+                                int colSize = rsCols.getInt("COLUMN_SIZE");
+                                boolean colSizeNull = rsCols.wasNull();
+                                int decDigits = rsCols.getInt("DECIMAL_DIGITS");
+                                boolean decDigitsNull = rsCols.wasNull();
                                 int nullableInt = rsCols.getInt("NULLABLE");
                                 boolean isNullable = nullableInt == DatabaseMetaData.columnNullable;
 
@@ -173,6 +154,8 @@ public class IngestionService {
                                 colEntity.setTableId(tableEntity.getId());
                                 colEntity.setName(cName);
                                 colEntity.setDataType(cType);
+                                colEntity.setDataLength(!colSizeNull && colSize > 0 ? colSize : null);
+                                colEntity.setPrecision(!decDigitsNull && decDigits >= 0 ? decDigits : null);
                                 colEntity.setNullable(isNullable);
                                 colEntity.setPrimaryKey(primaryKeys.contains(cName));
                                 colEntity.setForeignKey(foreignKeys.containsKey(cName));

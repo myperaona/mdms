@@ -19,10 +19,12 @@ public class DataSourceService {
     private static final Logger log = LoggerFactory.getLogger(DataSourceService.class);
     private final DataSourceMapper dataSourceMapper;
     private final EncryptionUtil encryptionUtil;
+    private final JdbcConnectionProvider jdbcConnectionProvider;
 
-    public DataSourceService(DataSourceMapper dataSourceMapper, EncryptionUtil encryptionUtil) {
+    public DataSourceService(DataSourceMapper dataSourceMapper, EncryptionUtil encryptionUtil, JdbcConnectionProvider jdbcConnectionProvider) {
         this.dataSourceMapper = dataSourceMapper;
         this.encryptionUtil = encryptionUtil;
+        this.jdbcConnectionProvider = jdbcConnectionProvider;
     }
 
     public List<DataSource> getAllDataSources() {
@@ -59,9 +61,13 @@ public class DataSourceService {
     }
 
     public boolean testConnection(UUID id) {
+        return pingDataSource(id);
+    }
+
+    public boolean pingDataSource(UUID id) {
         DataSource ds = dataSourceMapper.findById(id);
         if (ds == null) return false;
-        
+
         boolean success = testJdbcConnection(
             ds.getDbType(),
             ds.getHost(),
@@ -76,63 +82,43 @@ public class DataSourceService {
     }
 
     public boolean testJdbcConnection(String dbType, String host, int port, String databaseName, String username, String decryptedPassword) {
-        List<String> hostsToTry = new ArrayList<>();
-        if (host != null && !host.trim().isEmpty()) {
-            hostsToTry.add(host.trim());
-        }
-        if ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)) {
-            hostsToTry.add("host.docker.internal");
-        } else if ("host.docker.internal".equalsIgnoreCase(host)) {
-            hostsToTry.add("localhost");
-        }
+        String url = buildJdbcUrl(dbType, host, port, databaseName);
+        if (url == null) return false;
 
-        for (String targetHost : hostsToTry) {
-            String url = buildJdbcUrl(dbType, targetHost, port, databaseName);
-            String driverClass = getDriverClass(dbType);
-            if (url == null) return false;
-
-            try {
-                if (driverClass != null) {
-                    try {
-                        Class.forName(driverClass);
-                    } catch (ClassNotFoundException ce) {
-                        log.warn("JDBC driver class {} not found, using dynamic drivers", driverClass);
-                    }
-                }
-                try (Connection conn = DriverManager.getConnection(url, username, decryptedPassword)) {
-                    if (conn.isValid(5)) {
-                        return true;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("JDBC connection test attempt failed for {}: {}", targetHost, e.getMessage());
-            }
+        try (Connection conn = jdbcConnectionProvider.createConnection(dbType, url, username, decryptedPassword)) {
+            return conn != null && conn.isValid(5);
+        } catch (Exception e) {
+            log.warn("JDBC connection test failed for {}: {}", dbType, e.getMessage());
+            return false;
         }
-        log.error("JDBC connection test failed for {} database across all host targets: {}", dbType, hostsToTry);
-        return false;
     }
 
     public static String buildJdbcUrl(String dbType, String host, int port, String databaseName) {
-        if ("POSTGRESQL".equalsIgnoreCase(dbType)) {
+        if (dbType == null) return null;
+        String typeUpper = dbType.toUpperCase();
+        if (typeUpper.contains("POSTGRES")) {
             return String.format("jdbc:postgresql://%s:%d/%s", host, port, databaseName);
-        } else if ("MYSQL".equalsIgnoreCase(dbType)) {
-            return String.format("jdbc:mysql://%s:%d/%s", host, port, databaseName);
-        } else if ("ORACLE".equalsIgnoreCase(dbType)) {
+        } else if (typeUpper.contains("MARIA") || typeUpper.contains("MYSQL")) {
+            return String.format("jdbc:mariadb://%s:%d/%s", host, port, databaseName);
+        } else if (typeUpper.contains("ORACLE")) {
             return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, databaseName);
-        } else if ("MSSQL".equalsIgnoreCase(dbType)) {
+        } else if (typeUpper.contains("MSSQL") || typeUpper.contains("SQLSERVER")) {
             return String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=true;trustServerCertificate=true", host, port, databaseName);
-        } else if ("TIBERO".equalsIgnoreCase(dbType)) {
+        } else if (typeUpper.contains("TIBERO")) {
             return String.format("jdbc:tibero:thin:@%s:%d:%s", host, port, databaseName);
         }
-        return null;
+        return String.format("jdbc:postgresql://%s:%d/%s", host, port, databaseName);
     }
 
     public static String getDriverClass(String dbType) {
-        if ("POSTGRESQL".equalsIgnoreCase(dbType)) return "org.postgresql.Driver";
-        if ("MYSQL".equalsIgnoreCase(dbType)) return "com.mysql.cj.jdbc.Driver";
-        if ("ORACLE".equalsIgnoreCase(dbType)) return "oracle.jdbc.OracleDriver";
-        if ("MSSQL".equalsIgnoreCase(dbType)) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
-        if ("TIBERO".equalsIgnoreCase(dbType)) return "com.tmax.tibero.jdbc.TbDriver";
-        return null;
+        if (dbType == null) return "org.postgresql.Driver";
+        String typeUpper = dbType.toUpperCase();
+        if (typeUpper.contains("POSTGRES")) return "org.postgresql.Driver";
+        if (typeUpper.contains("MARIA")) return "org.mariadb.jdbc.Driver";
+        if (typeUpper.contains("MYSQL")) return "com.mysql.cj.jdbc.Driver";
+        if (typeUpper.contains("ORACLE")) return "oracle.jdbc.OracleDriver";
+        if (typeUpper.contains("MSSQL") || typeUpper.contains("SQLSERVER")) return "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+        if (typeUpper.contains("TIBERO")) return "com.tmax.tibero.jdbc.TbDriver";
+        return "org.postgresql.Driver";
     }
 }

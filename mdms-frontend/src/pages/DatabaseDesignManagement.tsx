@@ -890,18 +890,23 @@ export default function DatabaseDesignManagement() {
                 style={{ paddingLeft: '2.4rem', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '6px', fontSize: '0.85rem' }}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.825rem', color: '#94a3b8' }}>
-              <span>{locale === 'ko' ? '목록 개수 설정:' : 'Rows:'}</span>
-              <select
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                {locale === 'ko' ? '목록 개수 설정:' : 'Items per page:'}
+              </span>
+              <input
+                type="number"
                 className="form-control"
+                style={{ width: '70px', padding: '0.25rem 0.5rem', fontSize: '0.85rem', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '6px' }}
                 value={pageSize}
-                onChange={e => setPageSize(Number(e.target.value))}
-                style={{ width: 'auto', padding: '0.2rem 0.6rem', fontSize: '0.825rem', backgroundColor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '6px' }}
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
+                onChange={e => {
+                  const val = parseInt(e.target.value);
+                  if (val > 0) {
+                    setPageSize(val);
+                  }
+                }}
+                min={1}
+              />
             </div>
           </div>
 
@@ -1611,14 +1616,16 @@ export default function DatabaseDesignManagement() {
 
       {/* Tab 4: ERD Canvas */}
       {activeTab === 'erd' && selectedSessionId && (
-        <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)', height: 'calc(100vh - 280px)', minHeight: '580px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{locale === 'ko' ? '인터랙티브 ERD 다이어그램' : 'Interactive ERD Canvas'}</h3>
             <span style={{ fontSize: '0.825rem', color: '#94a3b8' }}>
               {locale === 'ko' ? '엔터티 카드를 드래그하여 배치 위치를 저장합니다.' : 'Drag entity cards to adjust layout.'}
             </span>
           </div>
-          <ErdCanvas entities={erdEntities} relations={erdRelations} onSavePositions={handleSaveErdPositions} />
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <ErdCanvas entities={erdEntities} relations={erdRelations} onSavePositions={handleSaveErdPositions} />
+          </div>
         </div>
       )}
 
@@ -1702,7 +1709,7 @@ export default function DatabaseDesignManagement() {
                       <button className="btn btn-sm btn-secondary" onClick={() => handleEditDbConnectionClick(conn)} title={locale === 'ko' ? '연결 수정' : 'Edit Connection'} style={{ padding: '0.25rem 0.45rem' }}>
                         <Edit2 size={12} />
                       </button>
-                      <button className="btn btn-sm" onClick={() => handleDeleteDbConnection(conn.connectionId)} title={locale === 'ko' ? '연결 삭제' : 'Delete Connection'} style={{ padding: '0.25rem 0.45rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                      <button className="btn btn-sm" onClick={() => handleDeleteDbConnection(conn.connectionId)} title={locale === 'ko' ? '연결 삭제' : 'Delete Connection'} style={{ padding: '0.25rem 0.45rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)' }} >
                         <Trash2 size={12} />
                       </button>
                     </div>
@@ -1721,8 +1728,8 @@ export default function DatabaseDesignManagement() {
 
       {/* Tab 6: DDL & Deploy */}
       {activeTab === 'deploy' && selectedSessionId && (
-        <div className="grid-2" style={{ gap: '1.5rem' }}>
-          <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="grid-2" style={{ gap: '1.5rem', height: 'calc(100vh - 280px)', minHeight: '580px' }}>
+          <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', height: '100%' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{locale === 'ko' ? 'DDL 자동 생성 및 미리보기' : 'Generate DDL'}</h3>
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', marginBottom: '1rem' }}>
               <select className="form-control" value={selectedConnIdForDeploy} onChange={e => setSelectedConnIdForDeploy(e.target.value)}>
@@ -1739,7 +1746,7 @@ export default function DatabaseDesignManagement() {
 
             <textarea
               className="form-control"
-              style={{ height: '300px', fontFamily: 'monospace', fontSize: '0.825rem', background: '#0f172a', color: '#38bdf8', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ flex: 1, minHeight: '300px', fontFamily: 'monospace', fontSize: '0.825rem', background: '#0f172a', color: '#38bdf8', border: '1px solid rgba(255,255,255,0.1)', resize: 'vertical' }}
               value={generatedDdl}
               onChange={e => setGeneratedDdl(e.target.value)}
               placeholder="CREATE TABLE SQL DDL..."
@@ -1755,9 +1762,9 @@ export default function DatabaseDesignManagement() {
             </button>
           </div>
 
-          <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{locale === 'ko' ? 'DB 반영 실행 이력 로그' : 'Deployment Logs'}</h3>
-            <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '420px', overflowY: 'auto' }}>
+          <div className="glass-card" style={{ border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1rem' }}>{locale === 'ko' ? 'DB 반영 실행 이력 로그' : 'Deployment Logs'}</h3>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
               {deployLogs.map(logItem => (
                 <div
                   key={logItem.deployLogId}

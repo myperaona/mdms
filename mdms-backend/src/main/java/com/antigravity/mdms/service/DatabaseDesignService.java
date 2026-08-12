@@ -23,9 +23,11 @@ public class DatabaseDesignService {
     private static final String AES_SECRET_KEY = "MDMSDatabaseDesignKeyForSecuredPass"; // 32 bytes fallback key
     
     private final DatabaseDesignMapper mapper;
+    private final JdbcConnectionProvider jdbcConnectionProvider;
 
-    public DatabaseDesignService(DatabaseDesignMapper mapper) {
+    public DatabaseDesignService(DatabaseDesignMapper mapper, JdbcConnectionProvider jdbcConnectionProvider) {
         this.mapper = mapper;
+        this.jdbcConnectionProvider = jdbcConnectionProvider;
     }
 
     private UUID requireCurrentTenantId() {
@@ -312,41 +314,37 @@ public class DatabaseDesignService {
             throw new IllegalArgumentException("Connection not found");
         }
         String plainPassword = decryptPassword(dbConn.getEncryptedPassword());
-        return performPingTest(dbConn.getDbType(), dbConn.getHost(), dbConn.getPort(), dbConn.getDbName(), dbConn.getSchemaName(), dbConn.getUserId(), plainPassword);
+        log.info("Testing DB Connection: name={}, type={}, host={}, port={}, dbName={}, user={}",
+                dbConn.getConnectionName(), dbConn.getDbType(), dbConn.getHost(), dbConn.getPort(), dbConn.getDbName(), dbConn.getUserId());
+        return performPingTest(dbConn.getDbType(), dbConn.getHost(), dbConn.getPort(), dbConn.getDbName(), dbConn.getUserId(), plainPassword);
     }
 
-    private Map<String, Object> performPingTest(String dbType, String host, int port, String dbName, String schemaName, String user, String password) {
+    public Map<String, Object> performPingTest(String dbType, String host, int port, String dbName, String user, String password) {
         Map<String, Object> result = new LinkedHashMap<>();
-        String jdbcUrl;
-        String driverClass;
-
-        String typeUpper = dbType.toUpperCase();
-        if (typeUpper.contains("POSTGRES")) {
+        String jdbcUrl = DataSourceService.buildJdbcUrl(dbType, host, port, dbName);
+        if (jdbcUrl == null) {
             jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, dbName);
-            driverClass = "org.postgresql.Driver";
-        } else if (typeUpper.contains("MARIA") || typeUpper.contains("MYSQL")) {
-            jdbcUrl = String.format("jdbc:mariadb://%s:%d/%s", host, port, dbName);
-            driverClass = "org.mariadb.jdbc.Driver";
-        } else {
-            jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, dbName);
-            driverClass = "org.postgresql.Driver";
         }
 
-        try {
-            Class.forName(driverClass);
-            try (Connection conn = DriverManager.getConnection(jdbcUrl, user, password)) {
-                if (conn.isValid(5)) {
-                    result.put("result", "SUCCESS");
-                    result.put("message", "Successfully connected to target database (" + dbType + " at " + host + ":" + port + ")");
-                } else {
-                    result.put("result", "FAIL");
-                    result.put("message", "Connection validation failed (Timeout)");
-                }
+        log.info("Attempting ping connection to {} with user {}", jdbcUrl, user);
+
+        try (Connection conn = jdbcConnectionProvider.createConnection(dbType, jdbcUrl, user, password)) {
+            if (conn.isValid(5)) {
+                log.info("Ping connection successful to {}", jdbcUrl);
+                result.put("result", "SUCCESS");
+                result.put("message", "Successfully connected to target database (" + dbType + " at " + host + ":" + port + "/" + dbName + ")");
+                return result;
             }
         } catch (Exception e) {
+            log.error("JDBC ping connection attempt failed for URL " + jdbcUrl + ": " + e.getMessage(), e);
             result.put("result", "FAIL");
-            result.put("message", "Connection Error: " + e.getMessage());
+            String errorDetails = e.getClass().getSimpleName() + ": " + e.getMessage();
+            result.put("message", "Connection Error: " + errorDetails);
+            return result;
         }
+
+        result.put("result", "FAIL");
+        result.put("message", "Connection Error: Unable to validate connection");
         return result;
     }
 
@@ -421,17 +419,10 @@ public class DatabaseDesignService {
         }
 
         String plainPassword = decryptPassword(dbConn.getEncryptedPassword());
-        String jdbcUrl;
-        String driverClass;
-        String typeUpper = dbConn.getDbType().toUpperCase();
+        String jdbcUrl = DataSourceService.buildJdbcUrl(dbConn.getDbType(), dbConn.getHost(), dbConn.getPort(), dbConn.getDbName());
+        String driverClass = DataSourceService.getDriverClass(dbConn.getDbType());
 
-        if (typeUpper.contains("POSTGRES")) {
-            jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", dbConn.getHost(), dbConn.getPort(), dbConn.getDbName());
-            driverClass = "org.postgresql.Driver";
-        } else if (typeUpper.contains("MARIA") || typeUpper.contains("MYSQL")) {
-            jdbcUrl = String.format("jdbc:mariadb://%s:%d/%s", dbConn.getHost(), dbConn.getPort(), dbConn.getDbName());
-            driverClass = "org.mariadb.jdbc.Driver";
-        } else {
+        if (jdbcUrl == null) {
             jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", dbConn.getHost(), dbConn.getPort(), dbConn.getDbName());
             driverClass = "org.postgresql.Driver";
         }
@@ -444,8 +435,7 @@ public class DatabaseDesignService {
         deployLog.setExecutedBy(username != null ? username : "System");
 
         try {
-            Class.forName(driverClass);
-            try (Connection conn = DriverManager.getConnection(jdbcUrl, dbConn.getUserId(), plainPassword);
+            try (Connection conn = jdbcConnectionProvider.createConnection(dbConn.getDbType(), jdbcUrl, dbConn.getUserId(), plainPassword);
                  Statement stmt = conn.createStatement()) {
                 
                 // Execute DDL statements split by semicolon

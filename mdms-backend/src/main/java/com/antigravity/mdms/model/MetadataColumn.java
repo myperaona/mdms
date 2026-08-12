@@ -13,6 +13,8 @@ public class MetadataColumn {
     private boolean foreignKey;
     private String referencedTable;
     private String referencedColumn;
+    private Integer dataLength;
+    private Integer precision;
     private String description;
     private OffsetDateTime createdAt;
 
@@ -30,19 +32,31 @@ public class MetadataColumn {
     public void setDataType(String dataType) { this.dataType = dataType; }
 
     public boolean isNullable() { return nullable; }
+    public boolean getNullable() { return nullable; }
     public void setNullable(boolean nullable) { this.nullable = nullable; }
+    public void setIsNullable(boolean nullable) { this.nullable = nullable; }
 
     public boolean isPrimaryKey() { return primaryKey; }
+    public boolean getPrimaryKey() { return primaryKey; }
     public void setPrimaryKey(boolean primaryKey) { this.primaryKey = primaryKey; }
+    public void setIsPrimaryKey(boolean primaryKey) { this.primaryKey = primaryKey; }
 
     public boolean isForeignKey() { return foreignKey; }
+    public boolean getForeignKey() { return foreignKey; }
     public void setForeignKey(boolean foreignKey) { this.foreignKey = foreignKey; }
+    public void setIsForeignKey(boolean foreignKey) { this.foreignKey = foreignKey; }
 
     public String getReferencedTable() { return referencedTable; }
     public void setReferencedTable(String referencedTable) { this.referencedTable = referencedTable; }
 
     public String getReferencedColumn() { return referencedColumn; }
     public void setReferencedColumn(String referencedColumn) { this.referencedColumn = referencedColumn; }
+
+    public Integer getDataLength() { return dataLength; }
+    public void setDataLength(Integer dataLength) { this.dataLength = dataLength; }
+
+    public Integer getPrecision() { return precision; }
+    public void setPrecision(Integer precision) { this.precision = precision; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

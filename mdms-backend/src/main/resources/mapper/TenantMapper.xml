@@ -75,6 +75,8 @@
             is_foreign_key BOOLEAN DEFAULT FALSE,
             referenced_table VARCHAR(100),
             referenced_column VARCHAR(100),
+            data_length INTEGER,
+            precision INTEGER,
             description TEXT,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
@@ -170,6 +172,120 @@
         )
     </update>
 
+    <update id="createDatabaseDesignTables">
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_design (
+            design_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            design_name VARCHAR(200) NOT NULL,
+            system_name VARCHAR(200),
+            description TEXT,
+            version VARCHAR(50) DEFAULT 'v1.0',
+            status VARCHAR(20) DEFAULT 'DRAFT',
+            created_by VARCHAR(100),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_subject_area (
+            subject_area_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            design_id UUID NOT NULL REFERENCES ${schemaName}.md_design(design_id) ON DELETE CASCADE,
+            subject_area_name VARCHAR(200) NOT NULL,
+            subject_area_code VARCHAR(100),
+            parent_subject_area_id UUID REFERENCES ${schemaName}.md_subject_area(subject_area_id) ON DELETE SET NULL,
+            description TEXT,
+            sort_order INT DEFAULT 0,
+            use_yn CHAR(1) DEFAULT 'Y'
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_subject_area_term (
+            mapping_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            subject_area_id UUID NOT NULL REFERENCES ${schemaName}.md_subject_area(subject_area_id) ON DELETE CASCADE,
+            term_id UUID NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(100)
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_table_design (
+            table_design_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            design_id UUID NOT NULL REFERENCES ${schemaName}.md_design(design_id) ON DELETE CASCADE,
+            subject_area_id UUID REFERENCES ${schemaName}.md_subject_area(subject_area_id) ON DELETE SET NULL,
+            table_logic_name VARCHAR(200) NOT NULL,
+            table_physical_name VARCHAR(200) NOT NULL,
+            description TEXT,
+            version VARCHAR(50) DEFAULT 'v1.0',
+            status VARCHAR(20) DEFAULT 'DRAFT',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_table_column (
+            column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            table_design_id UUID NOT NULL REFERENCES ${schemaName}.md_table_design(table_design_id) ON DELETE CASCADE,
+            term_id UUID,
+            column_logic_name VARCHAR(200) NOT NULL,
+            column_physical_name VARCHAR(200) NOT NULL,
+            data_type VARCHAR(50) NOT NULL,
+            length INT,
+            precision INT,
+            scale INT,
+            nullable_yn CHAR(1) DEFAULT 'Y',
+            default_value VARCHAR(200),
+            pk_yn CHAR(1) DEFAULT 'N',
+            fk_yn CHAR(1) DEFAULT 'N',
+            unique_yn CHAR(1) DEFAULT 'N',
+            sort_order INT DEFAULT 0,
+            remark TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_erd_entity (
+            entity_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            design_id UUID NOT NULL REFERENCES ${schemaName}.md_design(design_id) ON DELETE CASCADE,
+            table_design_id UUID NOT NULL REFERENCES ${schemaName}.md_table_design(table_design_id) ON DELETE CASCADE,
+            position_x INT NOT NULL DEFAULT 100,
+            position_y INT NOT NULL DEFAULT 100,
+            width INT DEFAULT 220,
+            height INT DEFAULT 180
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_erd_relation (
+            relation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            design_id UUID NOT NULL REFERENCES ${schemaName}.md_design(design_id) ON DELETE CASCADE,
+            from_table_id UUID NOT NULL REFERENCES ${schemaName}.md_table_design(table_design_id) ON DELETE CASCADE,
+            to_table_id UUID NOT NULL REFERENCES ${schemaName}.md_table_design(table_design_id) ON DELETE CASCADE,
+            from_column_id UUID REFERENCES ${schemaName}.md_table_column(column_id) ON DELETE SET NULL,
+            to_column_id UUID REFERENCES ${schemaName}.md_table_column(column_id) ON DELETE SET NULL,
+            relation_type VARCHAR(50) DEFAULT 'IDENTIFYING',
+            cardinality VARCHAR(50) DEFAULT '1:N'
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_db_connection (
+            connection_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id UUID NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+            connection_name VARCHAR(200) NOT NULL,
+            db_type VARCHAR(50) NOT NULL,
+            host VARCHAR(200) NOT NULL,
+            port INT NOT NULL,
+            db_name VARCHAR(200) NOT NULL,
+            schema_name VARCHAR(200),
+            user_id VARCHAR(200) NOT NULL,
+            encrypted_password VARCHAR(500) NOT NULL,
+            use_yn CHAR(1) DEFAULT 'Y',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ${schemaName}.md_db_deploy_log (
+            deploy_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            design_id UUID NOT NULL REFERENCES ${schemaName}.md_design(design_id) ON DELETE CASCADE,
+            table_design_id UUID REFERENCES ${schemaName}.md_table_design(table_design_id) ON DELETE SET NULL,
+            connection_id UUID NOT NULL REFERENCES ${schemaName}.md_db_connection(connection_id) ON DELETE CASCADE,
+            sql_text TEXT NOT NULL,
+            executed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            executed_by VARCHAR(200),
+            result_status VARCHAR(20) NOT NULL,
+            error_message TEXT
+        );
+    </update>
+
     <update id="upgradeStandardTermTable">
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS common_domain_name VARCHAR(100);
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS allowed_values VARCHAR(255);
@@ -177,6 +293,10 @@
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS expression_format VARCHAR(100);
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS admin_code_name VARCHAR(150);
         ALTER TABLE ${schemaName}.forbidden_word ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT TRUE;
+
+        -- Upgrade metadata_column table for data_length and precision
+        ALTER TABLE ${schemaName}.metadata_column ADD COLUMN IF NOT EXISTS data_length INTEGER;
+        ALTER TABLE ${schemaName}.metadata_column ADD COLUMN IF NOT EXISTS precision INTEGER;
 
         -- Upgrade domain table for new columns
         ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS enactment_order VARCHAR(50);

@@ -138,7 +138,9 @@ export default function ErdCanvas({ entities: initialEntities, relations, onSave
       style={{
         position: 'relative',
         width: '100%',
-        height: '650px',
+        height: '100%',
+        minHeight: '500px',
+        flex: 1,
         backgroundColor: '#0f172a',
         borderRadius: '12px',
         border: '1px solid rgba(255,255,255,0.1)',

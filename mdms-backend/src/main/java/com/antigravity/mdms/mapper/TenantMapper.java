@@ -26,6 +26,7 @@ public interface TenantMapper {
     void createForbiddenWordTable(@Param("schemaName") String schemaName);
     void createStandardWordTable(@Param("schemaName") String schemaName);
     void createStandardTermTable(@Param("schemaName") String schemaName);
+    void createDatabaseDesignTables(@Param("schemaName") String schemaName);
     void upgradeStandardTermTable(@Param("schemaName") String schemaName);
     void upgradeDomainTable(@Param("schemaName") String schemaName);
 }

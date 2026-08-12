@@ -46,6 +46,7 @@ public class TenantService {
         tenantMapper.createForbiddenWordTable(schemaName);
         tenantMapper.createStandardWordTable(schemaName);
         tenantMapper.createStandardTermTable(schemaName);
+        tenantMapper.createDatabaseDesignTables(schemaName);
 
         // Persist globally
         Tenant tenant = new Tenant();

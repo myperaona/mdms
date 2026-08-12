@@ -25,3 +25,7 @@ mdms-frontend/.env.local
 mdms-frontend/npm-debug.log*
 mdms-frontend/yarn-debug.log*
 mdms-frontend/yarn-error.log*
+
+# Drivers
+drivers/*.jar
+!drivers/.gitkeep

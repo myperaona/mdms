@@ -28,6 +28,9 @@ export default function DataCatalog() {
   const [colDescText, setColDescText] = useState('');
   const [colNameText, setColNameText] = useState('');
   const [colDataTypeText, setColDataTypeText] = useState('');
+  const [colDataLengthText, setColDataLengthText] = useState<string>('');
+  const [colPrecisionText, setColPrecisionText] = useState<string>('');
+  const [colNullableCheck, setColNullableCheck] = useState<boolean>(true);
   const [standardTerms, setStandardTerms] = useState<any[]>([]);
   const [selectedTermId, setSelectedTermId] = useState('');
 
@@ -70,6 +73,7 @@ export default function DataCatalog() {
           setSelectedSchemaId('');
           setTables([]);
           setSelectedTable(null);
+          setColumns([]);
         }
       } catch (e) {
         console.error('Failed to load schemas', e);
@@ -89,6 +93,7 @@ export default function DataCatalog() {
         } else {
           setTables([]);
           setSelectedTable(null);
+          setColumns([]);
         }
       } catch (e) {
         console.error('Failed to load tables', e);
@@ -99,18 +104,18 @@ export default function DataCatalog() {
 
   const handleSelectTable = async (table: any) => {
     setSelectedTable(table);
-    setTableDescText(table.description || '');
     setEditingTableDesc(false);
+    setTableDescText(table.description || '');
     setEditingColId(null);
-    setActiveTab('columns');
-
     try {
-      const data = await request(`/catalog/tables/${table.id}/columns`);
-      setColumns(data);
+      const colData = await request(`/catalog/tables/${table.id}/columns`);
+      setColumns(colData);
+
+      // Load lineage
       const linData = await request(`/catalog/tables/${table.id}/lineage`);
-      setLineage(linData);
+      setLineage(linData || { upstream: [], downstream: [] });
     } catch (e) {
-      console.error('Failed to load columns/lineage', e);
+      console.error('Failed to load table details', e);
     }
   };
 
@@ -119,13 +124,12 @@ export default function DataCatalog() {
     try {
       await request(`/catalog/tables/${selectedTable.id}/description`, {
         method: 'PUT',
-        body: JSON.stringify({ description: tableDescText }),
+        body: JSON.stringify({ description: tableDescText })
       });
+
       setSelectedTable({ ...selectedTable, description: tableDescText });
+      setTables(tables.map(t => t.id === selectedTable.id ? { ...t, description: tableDescText } : t));
       setEditingTableDesc(false);
-      // Refresh tables list to show description if needed
-      const data = await request(`/catalog/schemas/${selectedSchemaId}/tables`);
-      setTables(data);
     } catch (e: any) {
       alert(e.message || 'Failed to update table description');
     }
@@ -134,30 +138,25 @@ export default function DataCatalog() {
   const handleSaveColumn = async (colId: string) => {
     try {
       const col = columns.find(c => c.id === colId);
+      const parsedLen = colDataLengthText !== '' ? Number(colDataLengthText) : null;
+      const parsedPrec = colPrecisionText !== '' ? Number(colPrecisionText) : null;
+
       const payload = {
         ...col,
         name: colNameText,
         dataType: colDataTypeText,
+        nullable: colNullableCheck,
+        dataLength: parsedLen,
+        precision: parsedPrec,
         description: colDescText
       };
       
-      const token = localStorage.getItem('mdms_token');
-      const apiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
-      const response = await fetch(`${apiBase}/catalog/columns/${colId}`, {
+      await request(`/catalog/columns/${colId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to update column metadata');
-      }
-
-      setColumns(columns.map(c => c.id === colId ? { ...c, name: colNameText, dataType: colDataTypeText, description: colDescText } : c));
+      setColumns(columns.map(c => c.id === colId ? { ...c, name: colNameText, dataType: colDataTypeText, nullable: colNullableCheck, dataLength: parsedLen, precision: parsedPrec, description: colDescText } : c));
       setEditingColId(null);
     } catch (e: any) {
       alert(e.message || 'Failed to update column metadata');
@@ -177,8 +176,10 @@ export default function DataCatalog() {
           method: 'POST',
           body: term.wordIds.split(',')
         }).then(preview => {
-          if (preview && preview.dataType) {
-            setColDataTypeText(preview.dataType);
+          if (preview) {
+            if (preview.dataType) setColDataTypeText(preview.dataType);
+            if (preview.dataLength != null) setColDataLengthText(String(preview.dataLength));
+            if (preview.decimalLength != null) setColPrecisionText(String(preview.decimalLength));
           }
         }).catch(err => {
           console.warn('Failed to resolve data type for standard term', err);
@@ -460,6 +461,8 @@ export default function DataCatalog() {
                             <th style={{ width: '60px' }}>{locale === 'ko' ? '식별 키' : 'Keys'}</th>
                             <th>{t('colName')}</th>
                             <th>{t('colType')}</th>
+                            <th>{locale === 'ko' ? '데이터 길이' : 'Length'}</th>
+                            <th>{locale === 'ko' ? 'Precision' : 'Precision'}</th>
                             <th>{t('colNull')}</th>
                             <th>{t('colRef')}</th>
                             <th>{t('colDesc')}</th>
@@ -502,9 +505,52 @@ export default function DataCatalog() {
                                 )}
                               </td>
                               <td>
-                                <span style={{ fontSize: '0.8rem', color: c.nullable ? 'var(--text-muted)' : 'var(--color-danger)' }}>
-                                  {c.nullable ? 'NULLABLE' : 'NOT NULL'}
-                                </span>
+                                {editingColId === c.id ? (
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    value={colDataLengthText}
+                                    onChange={(e) => setColDataLengthText(e.target.value)}
+                                    placeholder="Length"
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '80px' }}
+                                  />
+                                ) : (
+                                  <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>
+                                    {c.dataLength != null ? c.dataLength : '-'}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {editingColId === c.id ? (
+                                  <input
+                                    type="number"
+                                    className="form-control"
+                                    value={colPrecisionText}
+                                    onChange={(e) => setColPrecisionText(e.target.value)}
+                                    placeholder="Prec"
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '70px' }}
+                                  />
+                                ) : (
+                                  <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>
+                                    {c.precision != null ? c.precision : '-'}
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {editingColId === c.id ? (
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: colNullableCheck ? 'var(--text-muted)' : 'var(--color-danger)' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={colNullableCheck}
+                                      onChange={(e) => setColNullableCheck(e.target.checked)}
+                                    />
+                                    {colNullableCheck ? 'NULLABLE' : 'NOT NULL'}
+                                  </label>
+                                ) : (
+                                  <span style={{ fontSize: '0.8rem', color: (c.nullable ?? c.isNullable) ? 'var(--text-muted)' : 'var(--color-danger)', fontWeight: (c.nullable ?? c.isNullable) ? 400 : 700 }}>
+                                    {(c.nullable ?? c.isNullable) ? 'NULLABLE' : 'NOT NULL'}
+                                  </span>
+                                )}
                               </td>
                               <td>
                                 {c.foreignKey ? (
@@ -548,6 +594,9 @@ export default function DataCatalog() {
                                     onClick={() => {
                                       setColNameText(c.name || '');
                                       setColDataTypeText(c.dataType || '');
+                                      setColDataLengthText(c.dataLength != null ? String(c.dataLength) : '');
+                                      setColPrecisionText(c.precision != null ? String(c.precision) : '');
+                                      setColNullableCheck(c.nullable ?? c.isNullable ?? true);
                                       setColDescText(c.description || '');
                                       setSelectedTermId('');
                                       setEditingColId(c.id);

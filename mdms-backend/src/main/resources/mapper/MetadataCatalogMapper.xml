@@ -50,16 +50,32 @@
     </update>
 
     <!-- Column Operations -->
-    <select id="findColumnById" resultType="com.antigravity.mdms.model.MetadataColumn">
+    <resultMap id="MetadataColumnMap" type="com.antigravity.mdms.model.MetadataColumn">
+        <id property="id" column="id" />
+        <result property="tableId" column="table_id" />
+        <result property="name" column="name" />
+        <result property="dataType" column="data_type" />
+        <result property="nullable" column="is_nullable" />
+        <result property="primaryKey" column="is_primary_key" />
+        <result property="foreignKey" column="is_foreign_key" />
+        <result property="referencedTable" column="referenced_table" />
+        <result property="referencedColumn" column="referenced_column" />
+        <result property="dataLength" column="data_length" />
+        <result property="precision" column="precision" />
+        <result property="description" column="description" />
+        <result property="createdAt" column="created_at" />
+    </resultMap>
+
+    <select id="findColumnById" resultMap="MetadataColumnMap">
         SELECT * FROM metadata_column WHERE id = #{id, jdbcType=OTHER}
     </select>
 
-    <select id="findColumnsByTableId" resultType="com.antigravity.mdms.model.MetadataColumn">
+    <select id="findColumnsByTableId" resultMap="MetadataColumnMap">
         SELECT * FROM metadata_column WHERE table_id = #{tableId, jdbcType=OTHER} ORDER BY name ASC
     </select>
 
     <insert id="insertColumn" parameterType="com.antigravity.mdms.model.MetadataColumn">
-        INSERT INTO metadata_column (id, table_id, name, data_type, is_nullable, is_primary_key, is_foreign_key, referenced_table, referenced_column, description, created_at)
+        INSERT INTO metadata_column (id, table_id, name, data_type, is_nullable, is_primary_key, is_foreign_key, referenced_table, referenced_column, data_length, precision, description, created_at)
         VALUES (
             COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), 
             #{tableId, jdbcType=OTHER}, 
@@ -70,6 +86,8 @@
             #{foreignKey}, 
             #{referencedTable}, 
             #{referencedColumn}, 
+            #{dataLength}, 
+            #{precision}, 
             #{description}, 
             COALESCE(#{createdAt}, CURRENT_TIMESTAMP)
         )
@@ -85,6 +103,9 @@
         UPDATE metadata_column
         SET name = #{name},
             data_type = #{dataType},
+            is_nullable = #{nullable},
+            data_length = #{dataLength},
+            precision = #{precision},
             description = #{description}
         WHERE id = #{id, jdbcType=OTHER}
     </update>
