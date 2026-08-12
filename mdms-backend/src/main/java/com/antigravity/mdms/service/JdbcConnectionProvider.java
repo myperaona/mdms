@@ -26,9 +26,12 @@ public class JdbcConnectionProvider {
             String trimmed = rawHost.trim();
             hosts.add(trimmed);
             // If running inside Docker container and target DB is on host machine or local network,
-            // also try host.docker.internal as fallback
+            // also try host.docker.internal and container name as fallbacks
             if (!"host.docker.internal".equalsIgnoreCase(trimmed)) {
                 hosts.add("host.docker.internal");
+            }
+            if ("localhost".equalsIgnoreCase(trimmed) || "127.0.0.1".equalsIgnoreCase(trimmed)) {
+                hosts.add("mariadb-container");
             }
         }
         return hosts;

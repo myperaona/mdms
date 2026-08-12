@@ -65,7 +65,8 @@ public class DynamicJdbcDriverLoader {
                     "com.tmax.tibero.jdbc.TbDriver",
                     "oracle.jdbc.OracleDriver",
                     "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-                    "com.mysql.cj.jdbc.Driver"
+                    "com.mysql.cj.jdbc.Driver",
+                    "org.mariadb.jdbc.Driver"
                 };
 
                 for (String className : fallbackDrivers) {

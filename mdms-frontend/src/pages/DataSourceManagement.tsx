@@ -62,6 +62,7 @@ export default function DataSourceManagement() {
         defaultDb = 'mdms_db';
         defaultUser = 'postgres';
         break;
+      case 'MARIADB':
       case 'MYSQL':
         defaultPort = 3306;
         defaultDb = 'mdms_db';
@@ -255,6 +256,7 @@ export default function DataSourceManagement() {
                   required
                 >
                   <option value="POSTGRESQL">PostgreSQL (Built-in)</option>
+                  <option value="MARIADB">MariaDB (Built-in)</option>
                   <option value="MYSQL">MySQL (Built-in)</option>
                   <option value="ORACLE">Oracle (Built-in)</option>
                   <option value="MSSQL">Microsoft SQL Server (Built-in)</option>
