@@ -495,7 +495,7 @@ export default function StandardizationManagement() {
 
     try {
       const token = localStorage.getItem('mdms_token');
-      const apiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
+      const apiBase = '/api';
       const response = await fetch(`${apiBase}/standardization/import/${importType}`, {
         method: 'POST',
         headers: {
@@ -522,7 +522,7 @@ export default function StandardizationManagement() {
 
   const triggerExport = (type: string) => {
     const token = localStorage.getItem('mdms_token');
-    const apiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
+    const apiBase = '/api';
     const url = `${apiBase}/standardization/export/${type}`;
     
     // Create a virtual anchor tag to download stream

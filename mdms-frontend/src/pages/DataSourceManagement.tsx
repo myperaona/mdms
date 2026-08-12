@@ -178,7 +178,7 @@ export default function DataSourceManagement() {
 
     try {
       const token = localStorage.getItem('mdms_token');
-      const apiBase = `${window.location.protocol}//${window.location.hostname}:8080/api`;
+      const apiBase = '/api';
       const response = await fetch(`${apiBase}/drivers/upload`, {
         method: 'POST',
         headers: {
