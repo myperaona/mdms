@@ -204,6 +204,8 @@
             c.id AS "columnId",
             c.name AS "columnName",
             c.data_type AS "columnDataType",
+            c.data_length AS "dataLength",
+            c.precision AS "precision",
             t.name AS "tableName",
             s.name AS "schemaName",
             ds.name AS "datasourceName",

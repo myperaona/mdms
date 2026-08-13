@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   Download,
   Upload,
-  Grid
+  Grid,
+  Search
 } from 'lucide-react';
 
 interface Domain {
@@ -81,13 +82,27 @@ interface ImportReport {
   logs: string[];
 }
 
+interface NonCompliantColumn {
+  datasourceName: string;
+  schemaName: string;
+  tableName: string;
+  columnName: string;
+  columnDataType: string;
+  dataLength?: number;
+  precision?: number;
+  violationType: string;
+  violationMessage: string;
+  suggestedPhysicalName: string;
+  suggestedLogicalName: string;
+}
+
 interface ComplianceReport {
   totalColumns: number;
   compliantColumns: number;
   fullyCompliantColumns: number;
   complianceRate: number;
   fullComplianceRate: number;
-  nonCompliantColumns: any[];
+  nonCompliantColumns: NonCompliantColumn[];
 }
 
 export default function StandardizationManagement() {
@@ -184,6 +199,9 @@ export default function StandardizationManagement() {
   const [reportSchemas, setReportSchemas] = useState<any[]>([]);
   const [selectedReportDsId, setSelectedReportDsId] = useState<string>('');
   const [selectedReportSchemaId, setSelectedReportSchemaId] = useState<string>('');
+  const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
+  const [reportPageSize, setReportPageSize] = useState<number>(10);
+  const [reportPage, setReportPage] = useState<number>(1);
 
   const fetchReportDataSources = async () => {
     try {
@@ -548,6 +566,37 @@ export default function StandardizationManagement() {
       .catch(err => alert(locale === 'ko' ? `반출 실패: ${err.message}` : `Export failed: ${err.message}`));
   };
 
+  const triggerReportExport = () => {
+    const token = localStorage.getItem('mdms_token');
+    let url = '/api/standardization/export/report';
+    const params = new URLSearchParams();
+    if (selectedReportDsId) params.append('dataSourceId', selectedReportDsId);
+    if (selectedReportSchemaId) params.append('schemaId', selectedReportSchemaId);
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+
+    const a = document.createElement('a');
+    fetch(url, {
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    })
+      .then(res => res.blob())
+      .then(blob => {
+        const fileUrl = window.URL.createObjectURL(blob);
+        a.href = fileUrl;
+        a.download = `non_compliant_columns_report.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(fileUrl);
+      })
+      .catch(err => {
+        setErrorMsg(locale === 'ko' ? `리포트 엑셀 다운로드 실패: ${err.message}` : `Failed to export report Excel: ${err.message}`);
+      });
+  };
+
   // Client-side filtering for Search
   const filteredDomains = domains.filter(d => 
     d.domainGroup.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -591,21 +640,39 @@ export default function StandardizationManagement() {
     w.physicalName.toLowerCase().includes(wordSelectorSearch.toLowerCase())
   );
 
+  const filteredReportColumns = (complianceReport?.nonCompliantColumns || []).filter(col => {
+    if (!reportSearchQuery) return true;
+    const q = reportSearchQuery.toLowerCase();
+    return (
+      (col.datasourceName && col.datasourceName.toLowerCase().includes(q)) ||
+      (col.schemaName && col.schemaName.toLowerCase().includes(q)) ||
+      (col.tableName && col.tableName.toLowerCase().includes(q)) ||
+      (col.columnName && col.columnName.toLowerCase().includes(q)) ||
+      (col.columnDataType && col.columnDataType.toLowerCase().includes(q)) ||
+      (col.violationMessage && col.violationMessage.toLowerCase().includes(q)) ||
+      (col.suggestedPhysicalName && col.suggestedPhysicalName.toLowerCase().includes(q)) ||
+      (col.suggestedLogicalName && col.suggestedLogicalName.toLowerCase().includes(q))
+    );
+  });
+
   // Pagination calculation
   const totalDomainPages = Math.ceil(filteredDomains.length / pageSize);
   const totalForbiddenPages = Math.ceil(filteredForbidden.length / pageSize);
   const totalWordPages = Math.ceil(filteredWords.length / pageSize);
   const totalTermPages = Math.ceil(filteredTerms.length / pageSize);
+  const totalReportPages = Math.ceil(filteredReportColumns.length / reportPageSize);
 
   const activeDomainPage = Math.max(1, Math.min(domainPage, totalDomainPages));
   const activeForbiddenPage = Math.max(1, Math.min(forbiddenPage, totalForbiddenPages));
   const activeWordPage = Math.max(1, Math.min(wordPage, totalWordPages));
   const activeTermPage = Math.max(1, Math.min(termPage, totalTermPages));
+  const activeReportPage = Math.max(1, Math.min(reportPage, totalReportPages || 1));
 
   const paginatedDomains = filteredDomains.slice((activeDomainPage - 1) * pageSize, activeDomainPage * pageSize);
   const paginatedForbidden = filteredForbidden.slice((activeForbiddenPage - 1) * pageSize, activeForbiddenPage * pageSize);
   const paginatedWords = filteredWords.slice((activeWordPage - 1) * pageSize, activeWordPage * pageSize);
   const paginatedTerms = filteredTerms.slice((activeTermPage - 1) * pageSize, activeTermPage * pageSize);
+  const paginatedReportColumns = filteredReportColumns.slice((activeReportPage - 1) * reportPageSize, activeReportPage * reportPageSize);
 
   const renderPaginationControls = (currentPage: number, totalPages: number, setPage: (p: number) => void) => {
     if (totalPages <= 1) return null;
@@ -1541,14 +1608,64 @@ export default function StandardizationManagement() {
 
           {/* Non-compliant Columns Details Table */}
           <div className="glass-card">
-            <h2>{locale === 'ko' ? '⚠️ 미준수 및 정밀 분석 대상 컬럼 목록 (최대 50개)' : '⚠️ Non-compliant Columns (Top 50)'}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h2>{locale === 'ko' ? '⚠️ 미준수 및 정밀 분석 대상 컬럼' : '⚠️ Non-compliant & Analysis Target Columns'}</h2>
+              <button 
+                className="btn btn-secondary" 
+                onClick={triggerReportExport}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
+              >
+                <Download size={16} />
+                {locale === 'ko' ? '엑셀 다운로드' : 'Export Excel (.xlsx)'}
+              </button>
+            </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
               {locale === 'ko' 
                 ? '물리명이 표준 용어 사전에 없거나, 금칙어가 포함되었거나, 혹은 등록된 도메인 타입 규격과 상이한 물리 컬럼 목록입니다.' 
                 : 'Columns that do not match standard terminology, contain forbidden words, or mismatch domain datatypes.'}
             </p>
 
-            <div className="table-responsive" style={{ maxHeight: '480px', overflowY: 'auto' }}>
+            {/* Controls: Search & Items per page */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, maxWidth: '400px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder={locale === 'ko' ? '데이터소스, 스키마, 테이블, 컬럼명, 진단위반 사유 검색...' : 'Search source, schema, table, column, violation...'}
+                    value={reportSearchQuery}
+                    onChange={(e) => {
+                      setReportSearchQuery(e.target.value);
+                      setReportPage(1);
+                    }}
+                    style={{ paddingLeft: '2.2rem', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {locale === 'ko' ? '목록 개수 설정:' : 'Items per page:'}
+                </span>
+                <input 
+                  type="number" 
+                  className="form-control" 
+                  style={{ width: '70px', padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
+                  value={reportPageSize} 
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (val > 0) {
+                      setReportPageSize(val);
+                      setReportPage(1);
+                    }
+                  }}
+                  min={1}
+                />
+              </div>
+            </div>
+
+            <div className="table-responsive" style={{ maxHeight: '520px', overflowY: 'auto' }}>
               <table className="table">
                 <thead>
                   <tr>
@@ -1557,25 +1674,31 @@ export default function StandardizationManagement() {
                     <th>{locale === 'ko' ? '테이블' : 'Table'}</th>
                     <th>{locale === 'ko' ? '컬럼명' : 'Column'}</th>
                     <th>{locale === 'ko' ? '데이터 타입' : 'Data Type'}</th>
+                    <th>{locale === 'ko' ? '데이터 길이' : 'Length'}</th>
+                    <th>{locale === 'ko' ? 'Precision' : 'Precision'}</th>
                     <th>{locale === 'ko' ? '진단 위반 사유' : 'Violation Reason'}</th>
                     <th>{locale === 'ko' ? '추천 표준 물리명/용어' : 'Recommended Term'}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {complianceReport.nonCompliantColumns.length === 0 ? (
+                  {paginatedReportColumns.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-success)', padding: '2rem' }}>
-                        {locale === 'ko' ? '🎉 모든 컬럼이 완벽하게 표준 지침을 준수하고 있습니다!' : 'All columns are perfectly compliant!'}
+                      <td colSpan={9} style={{ textAlign: 'center', color: 'var(--color-success)', padding: '2rem' }}>
+                        {filteredReportColumns.length === 0 && complianceReport.nonCompliantColumns.length > 0
+                          ? (locale === 'ko' ? '검색 결과가 없습니다.' : 'No matching columns found.')
+                          : (locale === 'ko' ? '🎉 모든 컬럼이 완벽하게 표준 지침을 준수하고 있습니다!' : 'All columns are perfectly compliant!')}
                       </td>
                     </tr>
                   ) : (
-                    complianceReport.nonCompliantColumns.map((col, idx) => (
+                    paginatedReportColumns.map((col, idx) => (
                       <tr key={idx}>
                         <td>{col.datasourceName}</td>
                         <td>{col.schemaName}</td>
                         <td>{col.tableName}</td>
                         <td style={{ fontWeight: 600 }}>{col.columnName}</td>
                         <td><code style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--color-primary)' }}>{col.columnDataType}</code></td>
+                        <td>{col.dataLength !== undefined && col.dataLength !== null ? col.dataLength : '-'}</td>
+                        <td>{col.precision !== undefined && col.precision !== null ? col.precision : '-'}</td>
                         <td>
                           <span className={`badge ${
                             col.violationType === 'FORBIDDEN_WORD_DETECTED' ? 'badge-danger' : col.violationType === 'TYPE_MISMATCH' ? 'badge-warning' : 'badge-secondary'
@@ -1595,6 +1718,8 @@ export default function StandardizationManagement() {
                 </tbody>
               </table>
             </div>
+
+            {renderPaginationControls(activeReportPage, totalReportPages, setReportPage)}
           </div>
         </div>
       )}

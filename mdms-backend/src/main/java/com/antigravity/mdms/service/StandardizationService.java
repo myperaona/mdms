@@ -17,6 +17,9 @@ import java.util.*;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.io.ByteArrayOutputStream;
 
 @Service
 public class StandardizationService {
@@ -839,18 +842,103 @@ public class StandardizationService {
         double complianceRate = totalColumns == 0 ? 0.0 : ((double) compliantColumns / totalColumns) * 100.0;
         double fullComplianceRate = totalColumns == 0 ? 0.0 : ((double) fullyCompliantColumns / totalColumns) * 100.0;
 
-        List<Map<String, Object>> topNonCompliant = nonCompliantList.stream()
-                .limit(50)
-                .collect(java.util.stream.Collectors.toList());
-
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("totalColumns", totalColumns);
         report.put("compliantColumns", compliantColumns);
         report.put("fullyCompliantColumns", fullyCompliantColumns);
         report.put("complianceRate", Math.round(complianceRate * 100.0) / 100.0);
         report.put("fullComplianceRate", Math.round(fullComplianceRate * 100.0) / 100.0);
-        report.put("nonCompliantColumns", topNonCompliant);
+        report.put("nonCompliantColumns", nonCompliantList);
         return report;
+    }
+
+    public String exportReportToCsv(UUID dataSourceId, UUID schemaId) {
+        Map<String, Object> report = getStandardizationReport(dataSourceId, schemaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nonCompliantList = (List<Map<String, Object>>) report.get("nonCompliantColumns");
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("데이터소스,스키마,테이블,컬럼명,데이터 타입,데이터 길이,Precision,진단 위반 사유,추천 표준 물리명,추천 표준 용어명\n");
+
+        if (nonCompliantList != null) {
+            for (Map<String, Object> nc : nonCompliantList) {
+                sb.append(escapeCsv((String) nc.get("datasourceName"))).append(",");
+                sb.append(escapeCsv((String) nc.get("schemaName"))).append(",");
+                sb.append(escapeCsv((String) nc.get("tableName"))).append(",");
+                sb.append(escapeCsv((String) nc.get("columnName"))).append(",");
+                sb.append(escapeCsv((String) nc.get("columnDataType"))).append(",");
+                sb.append(nc.get("dataLength") != null ? nc.get("dataLength") : "").append(",");
+                sb.append(nc.get("precision") != null ? nc.get("precision") : "").append(",");
+                sb.append(escapeCsv((String) nc.get("violationMessage"))).append(",");
+                sb.append(escapeCsv((String) nc.get("suggestedPhysicalName"))).append(",");
+                sb.append(escapeCsv((String) nc.get("suggestedLogicalName"))).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    public byte[] exportReportToXlsx(UUID dataSourceId, UUID schemaId) throws java.io.IOException {
+        Map<String, Object> report = getStandardizationReport(dataSourceId, schemaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nonCompliantList = (List<Map<String, Object>>) report.get("nonCompliantColumns");
+
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("미준수 및 정밀 분석 대상 컬럼");
+
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            String[] headers = {
+                "데이터소스", "스키마", "테이블", "컬럼명", "데이터 타입", 
+                "데이터 길이", "Precision", "진단 위반 사유", "추천 표준 물리명", "추천 표준 용어명"
+            };
+
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowIdx = 1;
+            if (nonCompliantList != null) {
+                for (Map<String, Object> nc : nonCompliantList) {
+                    Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(nc.get("datasourceName") != null ? (String) nc.get("datasourceName") : "");
+                    row.createCell(1).setCellValue(nc.get("schemaName") != null ? (String) nc.get("schemaName") : "");
+                    row.createCell(2).setCellValue(nc.get("tableName") != null ? (String) nc.get("tableName") : "");
+                    row.createCell(3).setCellValue(nc.get("columnName") != null ? (String) nc.get("columnName") : "");
+                    row.createCell(4).setCellValue(nc.get("columnDataType") != null ? (String) nc.get("columnDataType") : "");
+
+                    if (nc.get("dataLength") != null) {
+                        row.createCell(5).setCellValue(((Number) nc.get("dataLength")).longValue());
+                    } else {
+                        row.createCell(5).setCellValue("");
+                    }
+
+                    if (nc.get("precision") != null) {
+                        row.createCell(6).setCellValue(((Number) nc.get("precision")).longValue());
+                    } else {
+                        row.createCell(6).setCellValue("");
+                    }
+
+                    row.createCell(7).setCellValue(nc.get("violationMessage") != null ? (String) nc.get("violationMessage") : "");
+                    row.createCell(8).setCellValue(nc.get("suggestedPhysicalName") != null ? (String) nc.get("suggestedPhysicalName") : "");
+                    row.createCell(9).setCellValue(nc.get("suggestedLogicalName") != null ? (String) nc.get("suggestedLogicalName") : "");
+                }
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 
     private String escapeCsv(String s) {

@@ -202,6 +202,10 @@ public class StandardizationController {
                 csvData = service.exportStandardTermsToCsv();
                 filename = "standard_terms_export.csv";
                 break;
+            case "report":
+                csvData = service.exportReportToCsv(null, null);
+                filename = "non_compliant_columns_report.csv";
+                break;
             default:
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid export type");
                 return;
@@ -214,6 +218,21 @@ public class StandardizationController {
         // Ensure UTF-8 BOM is written so Excel displays Korean correctly
         response.getOutputStream().write(new byte[]{(byte)0xEF, (byte)0xBB, (byte)0xBF});
         response.getOutputStream().write(csvData.getBytes(StandardCharsets.UTF_8));
+        response.getOutputStream().flush();
+    }
+
+    @GetMapping("/export/report")
+    public void exportReportXlsx(
+            @RequestParam(value = "dataSourceId", required = false) UUID dataSourceId,
+            @RequestParam(value = "schemaId", required = false) UUID schemaId,
+            HttpServletResponse response) throws IOException {
+        byte[] excelBytes = service.exportReportToXlsx(dataSourceId, schemaId);
+        String filename = "non_compliant_columns_report.xlsx";
+
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodedFilename);
+        response.getOutputStream().write(excelBytes);
         response.getOutputStream().flush();
     }
 
