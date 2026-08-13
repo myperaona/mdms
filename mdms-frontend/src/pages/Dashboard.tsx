@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { request } from '../services/api';
+import { request, parseJwt } from '../services/api';
 import { Database, Folder, Table, FileText, CheckCircle2, XCircle, RefreshCw, KeyRound, AlertTriangle } from 'lucide-react';
 import { useTranslation } from '../context/i18n';
 
@@ -12,6 +12,10 @@ export default function Dashboard() {
   const [mfaSuccess, setMfaSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const { t, locale } = useTranslation();
+
+  const token = localStorage.getItem('mdms_token');
+  const claims = token ? parseJwt(token) : null;
+  const isMfaRegistered = !!(claims?.mfaEnabled || mfaSuccess);
 
   const fetchDashboardData = async () => {
     try {
@@ -78,10 +82,13 @@ export default function Dashboard() {
 
   const handleVerifyMfaConfirm = async (code: string) => {
     try {
-      await request('/auth/mfa/verify', {
+      const res = await request('/auth/mfa/verify', {
         method: 'POST',
         body: JSON.stringify({ code }),
       });
+      if (res && res.token) {
+        localStorage.setItem('mdms_token', res.token);
+      }
       setMfaSuccess(true);
       setMfaSecret('');
     } catch (e: any) {
@@ -243,81 +250,83 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* MFA Settings Panel */}
-          <div className="glass-card" style={{ maxWidth: '640px' }}>
-            <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <KeyRound size={20} style={{ color: 'var(--color-accent)' }} /> {t('mfaStatus')}
-            </h2>
-            <p style={{ marginBottom: '1.5rem' }}>
-              {locale === 'ko' ? 'Google Authenticator 등을 이용하여 계정의 이중 인증(TOTP) 보안 수단을 활성화합니다.' : 'Secure administrative actions by configuring a second verification factor (TOTP) using standard tools like Google Authenticator.'}
-            </p>
+          {/* MFA Settings Panel (Shown only if user has not registered MFA yet) */}
+          {!isMfaRegistered && (
+            <div className="glass-card" style={{ maxWidth: '640px' }}>
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <KeyRound size={20} style={{ color: 'var(--color-accent)' }} /> {t('mfaStatus')}
+              </h2>
+              <p style={{ marginBottom: '1.5rem' }}>
+                {locale === 'ko' ? 'Google Authenticator 등을 이용하여 계정의 이중 인증(TOTP) 보안 수단을 활성화합니다.' : 'Secure administrative actions by configuring a second verification factor (TOTP) using standard tools like Google Authenticator.'}
+              </p>
 
-            {mfaSuccess && (
-              <div className="badge badge-success" style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}>
-                {t('mfaEnabledMsg')}
-              </div>
-            )}
+              {mfaSuccess && (
+                <div className="badge badge-success" style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}>
+                  {t('mfaEnabledMsg')}
+                </div>
+              )}
 
-            {!mfaSecret && !mfaSuccess && (
-              <button onClick={handleSetupMfa} className="btn btn-secondary">
-                {t('mfaSetupBtn')}
-              </button>
-            )}
+              {!mfaSecret && !mfaSuccess && (
+                <button onClick={handleSetupMfa} className="btn btn-secondary">
+                  {t('mfaSetupBtn')}
+                </button>
+              )}
 
-            {mfaSecret && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '1.5rem',
-                borderRadius: '8px',
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-color)',
-                display: 'flex',
-                gap: '1.5rem',
-                alignItems: 'center'
-              }}>
+              {mfaSecret && (
                 <div style={{
-                  padding: '8px',
-                  backgroundColor: 'white',
+                  marginTop: '1rem',
+                  padding: '1.5rem',
                   borderRadius: '8px',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
+                  gap: '1.5rem',
+                  alignItems: 'center'
                 }}>
-                  <img src={qrUrl} alt="MFA QR Code" style={{ width: '160px', height: '160px' }} />
-                </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Secret Key:</span>
-                    <div style={{ fontFamily: 'monospace', fontSize: '1.2rem', color: 'var(--color-accent)', fontWeight: 700, margin: '0.25rem 0' }}>
-                      {mfaSecret}
+                  <div style={{
+                    padding: '8px',
+                    backgroundColor: 'white',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <img src={qrUrl} alt="MFA QR Code" style={{ width: '160px', height: '160px' }} />
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Secret Key:</span>
+                      <div style={{ fontFamily: 'monospace', fontSize: '1.2rem', color: 'var(--color-accent)', fontWeight: 700, margin: '0.25rem 0' }}>
+                        {mfaSecret}
+                      </div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {locale === 'ko' ? '위 QR 코드를 스캔하거나 비밀 키를 입력하여 인증을 완료하세요.' : 'Scan the code above or manually input the key to verify enrollment.'}
+                      </p>
                     </div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {locale === 'ko' ? '위 QR 코드를 스캔하거나 비밀 키를 입력하여 인증을 완료하세요.' : 'Scan the code above or manually input the key to verify enrollment.'}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="000000"
-                      maxLength={6}
-                      id="mfaVerifyInput"
-                      style={{ maxWidth: '120px', textAlign: 'center', letterSpacing: '0.1em' }}
-                    />
-                    <button
-                      onClick={() => {
-                        const input = document.getElementById('mfaVerifyInput') as HTMLInputElement;
-                        if (input) handleVerifyMfaConfirm(input.value);
-                      }}
-                      className="btn btn-accent"
-                    >
-                      {locale === 'ko' ? '코드 확인' : 'Confirm Code'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="000000"
+                        maxLength={6}
+                        id="mfaVerifyInput"
+                        style={{ maxWidth: '120px', textAlign: 'center', letterSpacing: '0.1em' }}
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('mfaVerifyInput') as HTMLInputElement;
+                          if (input) handleVerifyMfaConfirm(input.value);
+                        }}
+                        className="btn btn-accent"
+                      >
+                        {locale === 'ko' ? '코드 확인' : 'Confirm Code'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

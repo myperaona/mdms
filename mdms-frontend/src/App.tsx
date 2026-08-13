@@ -106,7 +106,7 @@ export default function App() {
             {!isSidebarCollapsed && (
               <div>
                 <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: 0, whiteSpace: 'nowrap' }}>MDMS</h2>
-                <span style={{ fontSize: '0.65rem', color: 'var(--color-accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--color-accent)', fontWeight: 700, textTransform: 'none', letterSpacing: '0.05em' }}>
                   SaaS Console
                 </span>
               </div>
