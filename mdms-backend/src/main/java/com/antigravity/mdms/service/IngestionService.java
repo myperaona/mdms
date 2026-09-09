@@ -110,11 +110,14 @@ public class IngestionService {
                 try (ResultSet rsTables = metaData.getTables(catalog, schemaPattern, "%", new String[]{"TABLE", "VIEW"})) {
                     while (rsTables.next()) {
                         String tName = rsTables.getString("TABLE_NAME");
+                        String tRemarks = null;
+                        try { tRemarks = rsTables.getString("REMARKS"); } catch (Exception ignored) {}
+
                         MetadataTable tableEntity = new MetadataTable();
                         tableEntity.setId(UUID.randomUUID());
                         tableEntity.setSchemaId(schemaEntity.getId());
                         tableEntity.setName(tName);
-                        tableEntity.setDescription("");
+                        tableEntity.setDescription(tRemarks != null ? tRemarks : "");
                         tableEntity.setRowCountEstimate(0L);
                         tables.add(tableEntity);
 
@@ -149,11 +152,14 @@ public class IngestionService {
                                 int nullableInt = rsCols.getInt("NULLABLE");
                                 boolean isNullable = nullableInt == DatabaseMetaData.columnNullable;
 
+                                String cRemarks = null;
+                                try { cRemarks = rsCols.getString("REMARKS"); } catch (Exception ignored) {}
+
                                 MetadataColumn colEntity = new MetadataColumn();
                                 colEntity.setId(UUID.randomUUID());
                                 colEntity.setTableId(tableEntity.getId());
-                                colEntity.setName(cName);
-                                colEntity.setDataType(cType);
+                                colEntity.setName(cName != null && cName.length() > 100 ? cName.substring(0, 100) : (cName != null ? cName : "COL"));
+                                colEntity.setDataType(cType != null && cType.length() > 100 ? cType.substring(0, 100) : (cType != null ? cType : "VARCHAR"));
                                 colEntity.setDataLength(!colSizeNull && colSize > 0 ? colSize : null);
                                 colEntity.setPrecision(!decDigitsNull && decDigits >= 0 ? decDigits : null);
                                 colEntity.setNullable(isNullable);
@@ -161,9 +167,10 @@ public class IngestionService {
                                 colEntity.setForeignKey(foreignKeys.containsKey(cName));
                                 if (colEntity.isForeignKey()) {
                                     String[] fkDetails = foreignKeys.get(cName);
-                                    colEntity.setReferencedTable(fkDetails[0]);
-                                    colEntity.setReferencedColumn(fkDetails[1]);
+                                    colEntity.setReferencedTable(fkDetails[0] != null && fkDetails[0].length() > 100 ? fkDetails[0].substring(0, 100) : fkDetails[0]);
+                                    colEntity.setReferencedColumn(fkDetails[1] != null && fkDetails[1].length() > 100 ? fkDetails[1].substring(0, 100) : fkDetails[1]);
                                 }
+                                colEntity.setLogicalName(cRemarks != null ? cRemarks : "");
                                 colEntity.setDescription("");
                                 columns.add(colEntity);
                             }

@@ -129,26 +129,62 @@ public class AuthController {
     }
 
     @PostMapping("/mfa/setup")
-    public ResponseEntity<?> setupMfa() {
+    public ResponseEntity<?> setupMfa(@RequestBody(required = false) MfaSetupRequest req) {
+        if (req == null || req.getPassword() == null || req.getPassword().isBlank()) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "MFA 등록을 위해 현재 비밀번호를 입력해야 합니다."));
+        }
         String username = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         AppUser user = userService.findByUsername(username);
         if (user == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
+        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "현재 비밀번호가 일치하지 않습니다."));
+        }
+
         Tenant tenant = tenantService.getTenantById(user.getTenantId());
         String tenantName = tenant != null ? tenant.getName() : "MDMS";
 
-        // Generate dynamic key and return configuration details
         String secret = mfaService.generateSecret();
         String qrUrl = mfaService.getQrCodeUrl(username, secret, tenantName);
-
-        // Store secret temporarily but don't enable yet until verification completes
-        userService.enableMfa(user.getId(), secret);
 
         Map<String, String> resp = new LinkedHashMap<>();
         resp.put("secret", secret);
         resp.put("qrCodeUrl", qrUrl);
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/mfa/confirm")
+    public ResponseEntity<?> confirmMfa(@RequestBody Map<String, String> payload) {
+        String secret = payload.get("secret");
+        String code = payload.get("code");
+        if (secret == null || secret.isBlank() || code == null || !code.matches("^\\d{6}$")) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "올바른 MFA 비밀키와 6자리 코드를 입력해주세요."));
+        }
+        String username = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        AppUser user = userService.findByUsername(username);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        boolean valid = mfaService.verifyCode(secret, code);
+        if (!valid) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Collections.singletonMap("error", "MFA 인증 코드가 일치하지 않습니다."));
+        }
+
+        // 최종 MFA 활성화
+        userService.enableMfa(user.getId(), secret);
+
+        // 1회성 복구 코드 생성 (8자리 랜덤 영문대문자/숫자)
+        String recoveryCode = java.util.UUID.randomUUID().toString().replaceAll("-", "").substring(0, 10).toUpperCase();
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("success", true);
+        resp.put("message", "MFA 등록이 완료되었습니다.");
+        resp.put("recoveryCode", recoveryCode);
         return ResponseEntity.ok(resp);
     }
 
@@ -189,6 +225,12 @@ public class AuthController {
         resp.put("username", user.getUsername());
         resp.put("tenantName", tenant != null ? tenant.getName() : "System");
         return ResponseEntity.ok(resp);
+    }
+
+    public static class MfaSetupRequest {
+        private String password;
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
     }
 
     // Inner DTO Request Classes

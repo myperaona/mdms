@@ -7,7 +7,7 @@ import DataSourceManagement from './pages/DataSourceManagement';
 import DataCatalog from './pages/DataCatalog';
 import StandardizationManagement from './pages/StandardizationManagement';
 import DatabaseDesignManagement from './pages/DatabaseDesignManagement';
-import { Database, LayoutDashboard, Settings2, FolderTree, LogOut, User, BookOpen, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Database, LayoutDashboard, Settings2, FolderTree, LogOut, User, BookOpen, Layers, ChevronLeft, ChevronRight, Menu, ChevronRight as BreadcrumbSeparator } from 'lucide-react';
 import { useTranslation } from './context/i18n';
 
 export default function App() {
@@ -16,7 +16,13 @@ export default function App() {
   const [tenantName, setTenantName] = useState('System');
   const [page, setPage] = useState<'login' | 'mfa' | 'dashboard' | 'datasources' | 'catalog' | 'standardization' | 'dbdesign'>('login');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const { locale, setLocale, t } = useTranslation();
+
+  // Dynamic html.lang update for accessibility
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   useEffect(() => {
     if (token) {
@@ -25,7 +31,6 @@ export default function App() {
         setUsername(claims.sub || '');
         setTenantName(claims.tenantName || 'System');
         
-        // Route according to MFA status in JWT
         const mfaEnabled = claims.mfaEnabled;
         const mfaVerified = claims.mfaVerified;
         
@@ -35,7 +40,6 @@ export default function App() {
           setPage('dashboard');
         }
       } else {
-        // Invalid token
         handleLogout();
       }
     } else {
@@ -47,10 +51,10 @@ export default function App() {
     localStorage.setItem('mdms_token', userToken);
     setUsername(user);
     if (mfaRequired) {
-      setToken(userToken); // triggers useEffect to route to 'mfa'
+      setToken(userToken);
     } else {
       setTenantName(tName);
-      setToken(userToken); // triggers useEffect to route to 'dashboard'
+      setToken(userToken);
     }
   };
 
@@ -62,7 +66,17 @@ export default function App() {
     setPage('login');
   };
 
-  // Render Login and MFA flows outside the main dashboard shell
+  const getBreadcrumbLabels = () => {
+    switch (page) {
+      case 'dashboard': return [t('dashboard')];
+      case 'datasources': return [t('dataSources')];
+      case 'catalog': return [t('dataCatalog')];
+      case 'standardization': return [locale === 'ko' ? '데이터 표준화' : 'Data Standardization'];
+      case 'dbdesign': return [locale === 'ko' ? '데이터베이스 설계' : 'Database Design'];
+      default: return [];
+    }
+  };
+
   if (page === 'login') {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
@@ -79,8 +93,23 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Premium Dashboard Slide Sidebar */}
-      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      {/* Mobile Floating Toggle Button */}
+      <button
+        className="mobile-menu-btn"
+        onClick={() => setIsMobileOpen(prev => !prev)}
+        aria-label="메뉴 열기/닫기"
+      >
+        <Menu size={22} />
+      </button>
+
+      {/* Backdrop for Mobile Sidebar */}
+      <div
+        className={`sidebar-overlay ${isMobileOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileOpen(false)}
+      />
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileOpen ? 'mobile-open' : ''}`}>
         <div style={{
           padding: isSidebarCollapsed ? '1.25rem 0.5rem' : '1.5rem',
           display: 'flex',
@@ -127,6 +156,7 @@ export default function App() {
               justifyContent: 'center'
             }}
             title={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            aria-label={isSidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
           >
             {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
@@ -143,7 +173,10 @@ export default function App() {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => setPage(item.id as any)}
+              onClick={() => {
+                setPage(item.id as any);
+                setIsMobileOpen(false);
+              }}
               title={isSidebarCollapsed ? item.label : undefined}
               style={{
                 display: 'flex',
@@ -250,8 +283,28 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Dashboard Application View Container */}
+      {/* Main Container */}
       <main className="main-content">
+        {/* Navigation Breadcrumbs Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.8rem',
+          color: 'var(--text-muted)',
+          marginBottom: '1.25rem',
+          paddingBottom: '0.5rem',
+          borderBottom: '1px solid var(--border-light)'
+        }}>
+          <span>MDMS</span>
+          <BreadcrumbSeparator size={14} />
+          {getBreadcrumbLabels().map((lbl, idx) => (
+            <span key={idx} style={{ color: idx === getBreadcrumbLabels().length - 1 ? 'var(--color-accent)' : 'var(--text-muted)', fontWeight: idx === getBreadcrumbLabels().length - 1 ? 600 : 400 }}>
+              {lbl}
+            </span>
+          ))}
+        </div>
+
         {page === 'dashboard' && <Dashboard />}
         {page === 'datasources' && <DataSourceManagement />}
         {page === 'catalog' && <DataCatalog />}

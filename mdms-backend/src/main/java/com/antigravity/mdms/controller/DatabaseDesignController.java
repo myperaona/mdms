@@ -233,9 +233,18 @@ public class DatabaseDesignController {
     public ResponseEntity<?> deployDdl(@PathVariable UUID designId, @RequestBody Map<String, String> body) {
         String connectionIdStr = body.get("connectionId");
         String sqlText = body.get("ddlText");
+        String confirmPin = body.get("confirmPin");
         if (connectionIdStr == null || sqlText == null) {
             return badRequest("connectionId and ddlText are required");
         }
+
+        // Check SQL Risk (DROP, TRUNCATE)
+        String upperSql = sqlText.toUpperCase();
+        boolean isHighRisk = upperSql.contains("DROP") || upperSql.contains("TRUNCATE");
+        if (isHighRisk && !"CONFIRM".equalsIgnoreCase(confirmPin)) {
+            return badRequest("DROP 또는 TRUNCATE 구문이 포함된 고위험 DDL 실행을 하려면 'CONFIRM' 승인 문구를 입력해야 합니다.");
+        }
+
         UUID connectionId = UUID.fromString(connectionIdStr);
         return ResponseEntity.ok(service.deployDdlToDb(designId, connectionId, sqlText, getCurrentUsername()));
     }

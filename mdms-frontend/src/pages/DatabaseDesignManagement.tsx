@@ -725,16 +725,32 @@ export default function DatabaseDesignManagement() {
     }
   };
 
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showDdlConfirmModal, setShowDdlConfirmModal] = useState(false);
+
   const handleDeployDdl = async () => {
     if (!selectedSessionId || !selectedConnIdForDeploy || !generatedDdl) return;
+    
+    // Check if DDL contains high-risk keywords
+    const upperDdl = generatedDdl.toUpperCase();
+    const isHighRisk = upperDdl.includes('DROP') || upperDdl.includes('TRUNCATE');
+
+    if (isHighRisk && confirmPin !== 'CONFIRM') {
+      alert(locale === 'ko' ? 'DROP 또는 TRUNCATE 구문이 포함되어 있습니다. 아래 팝업에서 "CONFIRM"을 입력해야 합니다.' : 'DDL contains high risk statements. Enter "CONFIRM" to proceed.');
+      setShowDdlConfirmModal(true);
+      return;
+    }
+
     if (!confirm(locale === 'ko' ? '타겟 DB에 DDL을 직접 실행하고 반영하시겠습니까?' : 'Execute and deploy DDL to target DB?')) return;
     setLoading(true);
     try {
       const logRes = await request(`/designs/${selectedSessionId}/ddl/deploy`, {
         method: 'POST',
-        body: JSON.stringify({ connectionId: selectedConnIdForDeploy, ddlText: generatedDdl })
+        body: JSON.stringify({ connectionId: selectedConnIdForDeploy, ddlText: generatedDdl, confirmPin })
       });
-      alert(`[${logRes.resultStatus}] ${logRes.errorMessage}`);
+      alert(`[${logRes.resultStatus}] ${logRes.errorMessage || 'DDL 반영 성공'}`);
+      setShowDdlConfirmModal(false);
+      setConfirmPin('');
       loadDeployLogs(selectedSessionId);
       loadSessions();
     } catch (e: any) {
@@ -1786,6 +1802,55 @@ export default function DatabaseDesignManagement() {
                   <div style={{ color: '#e2e8f0', marginTop: '0.2rem' }}>{logItem.errorMessage}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* High Risk DDL Confirm Modal */}
+      {showDdlConfirmModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}
+        >
+          <div className="glass-card" style={{ width: '420px', padding: '1.5rem', border: '1px solid var(--color-danger)' }}>
+            <h3 style={{ fontSize: '1.1rem', color: 'var(--color-danger)', marginBottom: '0.75rem' }}>
+              ⚠️ 고위험 DDL 실행 승인 (2차 확인)
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              이 DDL에는 DROP 또는 TRUNCATE 구문이 포함되어 있습니다. 실행을 진행하시려면 아래에 <strong>CONFIRM</strong>을 입력해 주세요.
+            </p>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="CONFIRM 입력"
+              value={confirmPin}
+              onChange={e => setConfirmPin(e.target.value)}
+              style={{ marginBottom: '1rem' }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeployDdl}
+                disabled={confirmPin !== 'CONFIRM'}
+              >
+                승인 및 DDL 실행
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowDdlConfirmModal(false); setConfirmPin(''); }}
+              >
+                취소
+              </button>
             </div>
           </div>
         </div>

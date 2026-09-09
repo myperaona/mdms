@@ -54,6 +54,7 @@
         <id property="id" column="id" />
         <result property="tableId" column="table_id" />
         <result property="name" column="name" />
+        <result property="logicalName" column="logical_name" />
         <result property="dataType" column="data_type" />
         <result property="nullable" column="is_nullable" />
         <result property="primaryKey" column="is_primary_key" />
@@ -67,19 +68,41 @@
     </resultMap>
 
     <select id="findColumnById" resultMap="MetadataColumnMap">
-        SELECT * FROM metadata_column WHERE id = #{id, jdbcType=OTHER}
+        SELECT 
+            c.id, c.table_id, c.name, c.data_type, c.is_nullable, c.is_primary_key, c.is_foreign_key,
+            c.referenced_table, c.referenced_column, c.data_length, c.precision, c.created_at,
+            COALESCE(NULLIF(c.logical_name, ''), NULLIF(st.logical_name, ''), c.description) AS logical_name,
+            CASE 
+                WHEN c.logical_name IS NOT NULL AND c.logical_name != '' AND c.description != c.logical_name THEN c.description
+                ELSE ''
+            END AS description
+        FROM metadata_column c 
+        LEFT JOIN standard_term st ON LOWER(c.name) = LOWER(st.physical_name)
+        WHERE c.id = #{id, jdbcType=OTHER}
     </select>
 
     <select id="findColumnsByTableId" resultMap="MetadataColumnMap">
-        SELECT * FROM metadata_column WHERE table_id = #{tableId, jdbcType=OTHER} ORDER BY name ASC
+        SELECT 
+            c.id, c.table_id, c.name, c.data_type, c.is_nullable, c.is_primary_key, c.is_foreign_key,
+            c.referenced_table, c.referenced_column, c.data_length, c.precision, c.created_at,
+            COALESCE(NULLIF(c.logical_name, ''), NULLIF(st.logical_name, ''), c.description) AS logical_name,
+            CASE 
+                WHEN c.logical_name IS NOT NULL AND c.logical_name != '' AND c.description != c.logical_name THEN c.description
+                ELSE ''
+            END AS description
+        FROM metadata_column c 
+        LEFT JOIN standard_term st ON LOWER(c.name) = LOWER(st.physical_name)
+        WHERE c.table_id = #{tableId, jdbcType=OTHER} 
+        ORDER BY c.name ASC
     </select>
 
     <insert id="insertColumn" parameterType="com.antigravity.mdms.model.MetadataColumn">
-        INSERT INTO metadata_column (id, table_id, name, data_type, is_nullable, is_primary_key, is_foreign_key, referenced_table, referenced_column, data_length, precision, description, created_at)
+        INSERT INTO metadata_column (id, table_id, name, logical_name, data_type, is_nullable, is_primary_key, is_foreign_key, referenced_table, referenced_column, data_length, precision, description, created_at)
         VALUES (
             COALESCE(#{id, jdbcType=OTHER}, gen_random_uuid()), 
             #{tableId, jdbcType=OTHER}, 
             #{name}, 
+            #{logicalName}, 
             #{dataType}, 
             #{nullable}, 
             #{primaryKey}, 
@@ -102,6 +125,7 @@
     <update id="updateColumn" parameterType="com.antigravity.mdms.model.MetadataColumn">
         UPDATE metadata_column
         SET name = #{name},
+            logical_name = #{logicalName},
             data_type = #{dataType},
             is_nullable = #{nullable},
             data_length = #{dataLength},

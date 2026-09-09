@@ -237,8 +237,9 @@ export default function DataSourceManagement() {
           <form onSubmit={handleCreate}>
             <div className="grid-2">
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '연결 프로필명' : 'Connection Profile Name'}</label>
+                <label htmlFor="connProfileName" className="form-label">{locale === 'ko' ? '연결 프로필명' : 'Connection Profile Name'}</label>
                 <input
+                  id="connProfileName"
                   type="text"
                   className="form-control"
                   placeholder="e.g. Dev PostgreSQL"
@@ -248,8 +249,9 @@ export default function DataSourceManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('dbType')}</label>
+                <label htmlFor="connDbType" className="form-label">{t('dbType')}</label>
                 <select
+                  id="connDbType"
                   className="form-control"
                   value={dbType}
                   onChange={(e) => handleDbTypeChange(e.target.value)}
@@ -262,7 +264,7 @@ export default function DataSourceManagement() {
                   <option value="MSSQL">Microsoft SQL Server (Built-in)</option>
                   <option value="TIBERO">
                     {drivers.length > 0
-                      ? `Tibero (Build-in - ${drivers.find(d => d.toLowerCase().includes('tibero')) || drivers[0]})`
+                      ? `Tibero (Built-in - ${drivers.find(d => d.toLowerCase().includes('tibero')) || drivers[0]})`
                       : 'Tibero (Requires external Jar upload)'}
                   </option>
                 </select>
@@ -271,8 +273,9 @@ export default function DataSourceManagement() {
 
             <div className="grid-3">
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '호스트 IP / 도메인' : 'Host IP / Domain'}</label>
+                <label htmlFor="connHost" className="form-label">{locale === 'ko' ? '호스트 IP / 도메인' : 'Host IP / Domain'}</label>
                 <input
+                  id="connHost"
                   type="text"
                   className="form-control"
                   value={host}
@@ -281,18 +284,22 @@ export default function DataSourceManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '포트' : 'Port'}</label>
+                <label htmlFor="connPort" className="form-label">{locale === 'ko' ? '포트' : 'Port'}</label>
                 <input
+                  id="connPort"
                   type="number"
                   className="form-control"
+                  min={1}
+                  max={65535}
                   value={port}
                   onChange={(e) => setPort(Number(e.target.value))}
                   required
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '데이터베이스명 / SID' : 'Database Name / SID'}</label>
+                <label htmlFor="connDatabaseName" className="form-label">{locale === 'ko' ? '데이터베이스명 / SID' : 'Database Name / SID'}</label>
                 <input
+                  id="connDatabaseName"
                   type="text"
                   className="form-control"
                   value={databaseName}
@@ -304,8 +311,9 @@ export default function DataSourceManagement() {
 
             <div className="grid-2" style={{ marginBottom: '1.5rem' }}>
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '계정 ID' : 'DB User Username'}</label>
+                <label htmlFor="connUsername" className="form-label">{locale === 'ko' ? '계정 ID' : 'DB User Username'}</label>
                 <input
+                  id="connUsername"
                   type="text"
                   className="form-control"
                   value={username}
@@ -314,8 +322,9 @@ export default function DataSourceManagement() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{locale === 'ko' ? '계정 비밀번호' : 'DB User Password'}</label>
+                <label htmlFor="connPassword" className="form-label">{locale === 'ko' ? '계정 비밀번호' : 'DB User Password'}</label>
                 <input
+                  id="connPassword"
                   type="password"
                   className="form-control"
                   placeholder="••••••••"
@@ -417,8 +426,10 @@ export default function DataSourceManagement() {
                   <td style={{ textAlign: 'right' }}>
                     <button
                       onClick={() => handleDelete(ds.id)}
-                      className="btn btn-secondary"
-                      style={{ padding: '0.5rem', borderRadius: '6px', color: 'var(--color-danger)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+                      className="btn btn-danger"
+                      style={{ padding: '0.5rem', borderRadius: '6px' }}
+                      title={locale === 'ko' ? '데이터 소스 삭제' : 'Delete Data Source'}
+                      aria-label={locale === 'ko' ? `${ds.name} 데이터 소스 삭제` : `Delete data source ${ds.name}`}
                     >
                       <Trash2 size={16} />
                     </button>

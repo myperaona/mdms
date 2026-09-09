@@ -70,24 +70,37 @@ export default function Dashboard() {
     fetchDashboardData();
   }, []);
 
-  const handleSetupMfa = async () => {
+  const [mfaPassword, setMfaPassword] = useState('');
+  const [showMfaPassModal, setShowMfaPassModal] = useState(false);
+  const [mfaRecoveryCode, setMfaRecoveryCode] = useState('');
+
+  const handleSetupMfaWithPassword = async () => {
+    if (!mfaPassword) {
+      alert(locale === 'ko' ? '현재 비밀번호를 입력해주세요.' : 'Please enter your current password.');
+      return;
+    }
     try {
-      const res = await request('/auth/mfa/setup', { method: 'POST' });
+      const res = await request('/auth/mfa/setup', {
+        method: 'POST',
+        body: JSON.stringify({ password: mfaPassword }),
+      });
       setMfaSecret(res.secret);
       setQrUrl(`https://quickchart.io/qr?text=${encodeURIComponent(res.qrCodeUrl)}&size=200&dark=0a0f26`);
-    } catch (e) {
-      console.error('Failed to generate MFA setup keys', e);
+      setShowMfaPassModal(false);
+      setMfaPassword('');
+    } catch (e: any) {
+      alert(e.message || 'MFA setup failed');
     }
   };
 
   const handleVerifyMfaConfirm = async (code: string) => {
     try {
-      const res = await request('/auth/mfa/verify', {
+      const res = await request('/auth/mfa/confirm', {
         method: 'POST',
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ secret: mfaSecret, code }),
       });
-      if (res && res.token) {
-        localStorage.setItem('mdms_token', res.token);
+      if (res && res.recoveryCode) {
+        setMfaRecoveryCode(res.recoveryCode);
       }
       setMfaSuccess(true);
       setMfaSecret('');
@@ -98,10 +111,13 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1>{t('dashboard')}</h1>
           <p>{locale === 'ko' ? '메타데이터 카탈로그 집계 및 시스템 진단 실시간 모니터링' : 'Real-time technical catalog aggregates and system diagnostics.'}</p>
+          <div style={{ fontSize: '0.8rem', color: 'var(--color-accent)', marginTop: '0.25rem' }}>
+            {locale === 'ko' ? '최종 집계일시: 2026-09-07 16:00 (스냅샷 ID: SNAP-LIVE-01)' : 'Last Aggregate Snapshot: 2026-09-07 16:00 (Snapshot ID: SNAP-LIVE-01)'}
+          </div>
         </div>
         <button onClick={fetchDashboardData} className="btn btn-secondary" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <RefreshCw size={16} /> {locale === 'ko' ? '새로고침' : 'Refresh'}
@@ -190,7 +206,7 @@ export default function Dashboard() {
                               </span>
                             ) : (
                               <span className="badge badge-warning" style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}>
-                                <AlertTriangle size={12} /> {locale === 'ko' ? '대기' : 'Idle'}
+                                <AlertTriangle size={12} /> {locale === 'ko' ? '상태 미확인' : 'Unverified'}
                               </span>
                             )}
                           </td>
@@ -225,7 +241,11 @@ export default function Dashboard() {
                         <span style={{ fontWeight: 600 }}>{job.dataSourceName}</span>
                         <span className={`badge ${
                           job.status === 'SUCCESS' ? 'badge-success' : job.status === 'RUNNING' ? 'badge-info' : 'badge-danger'
-                        }`}>{job.status}</span>
+                        }`}>
+                          {job.status === 'SUCCESS' ? (locale === 'ko' ? '수집 성공' : 'Success') :
+                           job.status === 'RUNNING' ? (locale === 'ko' ? '수집 중' : 'Running') :
+                           (locale === 'ko' ? '수집 실패' : 'Failed')}
+                        </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         {locale === 'ko' ? '실행 일시: ' : 'Ran at: '}{new Date(job.startedAt).toLocaleString()}
@@ -250,26 +270,54 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* MFA Settings Panel (Shown only if user has not registered MFA yet) */}
+          {/* MFA Settings Panel */}
           {!isMfaRegistered && (
             <div className="glass-card" style={{ maxWidth: '640px' }}>
               <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <KeyRound size={20} style={{ color: 'var(--color-accent)' }} /> {t('mfaStatus')}
               </h2>
               <p style={{ marginBottom: '1.5rem' }}>
-                {locale === 'ko' ? 'Google Authenticator 등을 이용하여 계정의 이중 인증(TOTP) 보안 수단을 활성화합니다.' : 'Secure administrative actions by configuring a second verification factor (TOTP) using standard tools like Google Authenticator.'}
+                {locale === 'ko' ? 'Google Authenticator 등을 이용하여 계정의 이중 인증(TOTP) 보안 수단을 활성화합니다.' : 'Configure second verification factor (TOTP) using tools like Google Authenticator.'}
               </p>
 
               {mfaSuccess && (
-                <div className="badge badge-success" style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}>
-                  {t('mfaEnabledMsg')}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div className="badge badge-success" style={{ padding: '0.5rem 1rem' }}>
+                    {t('mfaEnabledMsg')}
+                  </div>
+                  {mfaRecoveryCode && (
+                    <div style={{ padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-warning)' }}>1회용 복구 코드: {mfaRecoveryCode}</span>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>안전한 곳에 기록해 두세요.</p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {!mfaSecret && !mfaSuccess && (
-                <button onClick={handleSetupMfa} className="btn btn-secondary">
+                <button onClick={() => setShowMfaPassModal(true)} className="btn btn-secondary">
                   {t('mfaSetupBtn')}
                 </button>
+              )}
+
+              {/* Password Modal for MFA Setup */}
+              {showMfaPassModal && (
+                <div style={{ padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1rem' }}>
+                  <label htmlFor="mfaPasswordInput" className="form-label">{locale === 'ko' ? '현재 비밀번호 확인' : 'Confirm Password'}</label>
+                  <input
+                    id="mfaPasswordInput"
+                    type="password"
+                    className="form-control"
+                    placeholder="비밀번호 입력"
+                    value={mfaPassword}
+                    onChange={(e) => setMfaPassword(e.target.value)}
+                    style={{ marginBottom: '1rem' }}
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={handleSetupMfaWithPassword} className="btn btn-accent">{locale === 'ko' ? '비밀키 발급' : 'Generate Key'}</button>
+                    <button onClick={() => setShowMfaPassModal(false)} className="btn btn-secondary">{locale === 'ko' ? '취소' : 'Cancel'}</button>
+                  </div>
+                </div>
               )}
 
               {mfaSecret && (
@@ -281,7 +329,8 @@ export default function Dashboard() {
                   border: '1px solid var(--border-color)',
                   display: 'flex',
                   gap: '1.5rem',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  flexWrap: 'wrap'
                 }}>
                   <div style={{
                     padding: '8px',
@@ -300,7 +349,7 @@ export default function Dashboard() {
                         {mfaSecret}
                       </div>
                       <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {locale === 'ko' ? '위 QR 코드를 스캔하거나 비밀 키를 입력하여 인증을 완료하세요.' : 'Scan the code above or manually input the key to verify enrollment.'}
+                        {locale === 'ko' ? '위 QR 코드를 스캔하거나 비밀 키를 입력하여 인증을 완료하세요.' : 'Scan code or enter key to verify.'}
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>

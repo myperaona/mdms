@@ -370,8 +370,64 @@ tr:hover td {
   }
 }
 
-@media (max-width: 640px) {
-  .grid-2, .grid-3, .grid-4 {
-    grid-template-columns: 1fr;
+/* Mobile Hamburger Floating Button & Overlay */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1050;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 99;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
   }
+  .sidebar-overlay.active {
+    display: block;
+  }
+}
+
+/* Dangerous Action Button */
+.btn-danger {
+  background: linear-gradient(135deg, var(--color-danger) 0%, hsl(340, 80%, 45%) 100%);
+  color: white;
+  box-shadow: 0 4px 14px hsla(350, 89%, 60%, 0.3);
+}
+
+.btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px hsla(350, 89%, 60%, 0.45);
+  filter: brightness(1.1);
+}
+
+/* Accessibility Focus Indicator */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Minimum Touch Target for Mobile Accessibility */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
 }

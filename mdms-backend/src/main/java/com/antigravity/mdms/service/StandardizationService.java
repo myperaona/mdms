@@ -800,25 +800,7 @@ public class StandardizationService {
                 
                 // Check if datatype matches standard term storage format
                 String storageFormat = matchedTerm.getStorageFormat();
-                if (storageFormat != null && !storageFormat.trim().isEmpty() && colDataType != null) {
-                    String normColType = colDataType.replaceAll("\\s+", "").toUpperCase();
-                    String normStorage = storageFormat.replaceAll("\\s+", "").toUpperCase();
-                    
-                    if (normStorage.contains(normColType) || normColType.contains(normStorage) 
-                        || (normColType.startsWith("VARCHAR") && normStorage.startsWith("VARCHAR"))
-                        || (normColType.startsWith("CHAR") && normStorage.startsWith("CHAR"))
-                        || (normColType.startsWith("NUMERIC") && normStorage.startsWith("NUMERIC"))
-                        || (normColType.startsWith("DECIMAL") && normStorage.startsWith("DECIMAL"))
-                        || ((normColType.equals("INT4") || normColType.equals("INT8") || normColType.equals("INTEGER") || normColType.equals("INT") || normColType.equals("BPCHAR")) 
-                            && (normStorage.startsWith("INT") || normStorage.startsWith("NUMERIC") || normStorage.startsWith("INTEGER") || normStorage.startsWith("VARCHAR") || normStorage.startsWith("CHAR")))
-                        || (normColType.startsWith("TIMESTAMP") && normStorage.startsWith("DATE"))
-                        || (normColType.startsWith("TIMESTAMP") && normStorage.startsWith("TIMESTAMP"))
-                        || (normColType.startsWith("DATE") && normStorage.startsWith("DATE"))) {
-                        isTypeCompliant = true;
-                    }
-                } else {
-                    isTypeCompliant = true;
-                }
+                isTypeCompliant = checkDataTypeCompliance(storageFormat, colDataType);
 
                 if (isTypeCompliant) {
                     fullyCompliantColumns++;
@@ -939,6 +921,88 @@ public class StandardizationService {
             workbook.write(out);
             return out.toByteArray();
         }
+    }
+
+    /**
+     * Determines whether the physical column data type matches the standard storage format.
+     * Handles physical SQL types (VARCHAR, TIMESTAMP, etc.), Korean descriptive formats
+     * (e.g., "20자리 이내 문자", "100자리 이내 문자", "10자리 이내 숫자"), and date/time format patterns
+     * (e.g., "YYYYMMDDHH24MISS", "YYYYMMDD").
+     */
+    public boolean checkDataTypeCompliance(String storageFormat, String colDataType) {
+        if (storageFormat == null || storageFormat.trim().isEmpty() || colDataType == null || colDataType.trim().isEmpty()) {
+            return true;
+        }
+
+        String normStorage = storageFormat.trim().replaceAll("\\s+", "").toUpperCase();
+        String normCol = colDataType.trim().replaceAll("\\s+", "").toUpperCase();
+
+        // 1. Direct match or substring containment (e.g., VARCHAR vs VARCHAR(20), TIMESTAMP vs TIMESTAMP)
+        if (normStorage.equals(normCol) || normStorage.contains(normCol) || normCol.contains(normStorage)) {
+            return true;
+        }
+
+        // 2. Identify storage format categories
+        boolean storageIsString = normStorage.contains("문자") || normStorage.contains("텍스트") 
+                || normStorage.contains("가변") || normStorage.contains("고정")
+                || normStorage.startsWith("VARCHAR") || normStorage.startsWith("CHAR") 
+                || normStorage.startsWith("TEXT") || normStorage.startsWith("BPCHAR") 
+                || normStorage.startsWith("CLOB") || normStorage.startsWith("NVARCHAR") || normStorage.startsWith("STRING");
+
+        boolean storageIsDateTime = normStorage.contains("YYYY") || normStorage.contains("MM") || normStorage.contains("DD")
+                || normStorage.contains("HH") || normStorage.contains("SS") || normStorage.contains("MISS")
+                || normStorage.contains("일시") || normStorage.contains("날짜") || normStorage.contains("시간")
+                || normStorage.startsWith("DATE") || normStorage.startsWith("TIMESTAMP") || normStorage.startsWith("DATETIME") || normStorage.startsWith("TIME");
+
+        boolean storageIsNumeric = normStorage.contains("숫자") || normStorage.contains("정수") || normStorage.contains("실수")
+                || normStorage.startsWith("INT") || normStorage.startsWith("NUMERIC") || normStorage.startsWith("NUMBER")
+                || normStorage.startsWith("DECIMAL") || normStorage.startsWith("BIGINT") || normStorage.startsWith("SMALLINT")
+                || normStorage.startsWith("FLOAT") || normStorage.startsWith("DOUBLE") || normStorage.startsWith("REAL");
+
+        boolean storageIsBoolean = normStorage.contains("여부") || normStorage.contains("불리언") 
+                || normStorage.startsWith("BOOL") || normStorage.startsWith("BOOLEAN") || normStorage.equals("Y/N");
+
+        // 3. Identify column data type categories
+        boolean colIsString = normCol.startsWith("VARCHAR") || normCol.startsWith("CHAR") 
+                || normCol.startsWith("TEXT") || normCol.startsWith("BPCHAR") 
+                || normCol.startsWith("CLOB") || normCol.startsWith("NVARCHAR") || normCol.startsWith("STRING");
+
+        boolean colIsDateTime = normCol.startsWith("DATE") || normCol.startsWith("TIMESTAMP") || normCol.startsWith("DATETIME") || normCol.startsWith("TIME");
+
+        boolean colIsNumeric = normCol.startsWith("INT") || normCol.startsWith("NUMERIC") || normCol.startsWith("NUMBER")
+                || normCol.startsWith("DECIMAL") || normCol.startsWith("BIGINT") || normCol.startsWith("SMALLINT")
+                || normCol.startsWith("FLOAT") || normCol.startsWith("DOUBLE") || normCol.startsWith("REAL")
+                || normCol.equals("INT4") || normCol.equals("INT8");
+
+        boolean colIsBoolean = normCol.startsWith("BOOL") || normCol.startsWith("BOOLEAN") 
+                || normCol.equals("CHAR") || normCol.startsWith("CHAR") || normCol.startsWith("VARCHAR") || normCol.equals("BIT");
+
+        // 4. Perform category-level cross compliance checks
+        if (storageIsString && colIsString) {
+            return true;
+        }
+
+        if (storageIsDateTime && (colIsDateTime || colIsString)) {
+            return true;
+        }
+
+        if (storageIsNumeric && colIsNumeric) {
+            return true;
+        }
+
+        if (storageIsBoolean && colIsBoolean) {
+            return true;
+        }
+
+        // 5. Alias & DBMS type compatibility fallbacks (e.g. INT4/INT8/BPCHAR vs INT/NUMERIC/CHAR/VARCHAR)
+        if ((colIsString || normCol.equals("BPCHAR")) && (storageIsString || normStorage.contains("CHAR") || normStorage.contains("VARCHAR"))) {
+            return true;
+        }
+        if ((colIsNumeric || normCol.startsWith("INT")) && (storageIsNumeric || normStorage.contains("INT") || normStorage.contains("NUMERIC"))) {
+            return true;
+        }
+
+        return false;
     }
 
     private String escapeCsv(String s) {

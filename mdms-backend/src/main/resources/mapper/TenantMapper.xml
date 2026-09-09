@@ -69,7 +69,8 @@
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             table_id UUID REFERENCES ${schemaName}.metadata_table(id) ON DELETE CASCADE,
             name VARCHAR(100) NOT NULL,
-            data_type VARCHAR(50) NOT NULL,
+            logical_name TEXT,
+            data_type VARCHAR(100) NOT NULL,
             is_nullable BOOLEAN DEFAULT TRUE,
             is_primary_key BOOLEAN DEFAULT FALSE,
             is_foreign_key BOOLEAN DEFAULT FALSE,
@@ -294,9 +295,17 @@
         ALTER TABLE ${schemaName}.standard_term ADD COLUMN IF NOT EXISTS admin_code_name VARCHAR(150);
         ALTER TABLE ${schemaName}.forbidden_word ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT TRUE;
 
-        -- Upgrade metadata_column table for data_length and precision
+        -- Upgrade metadata_column table for data_length, precision, and logical_name
         ALTER TABLE ${schemaName}.metadata_column ADD COLUMN IF NOT EXISTS data_length INTEGER;
         ALTER TABLE ${schemaName}.metadata_column ADD COLUMN IF NOT EXISTS precision INTEGER;
+        ALTER TABLE ${schemaName}.metadata_column ADD COLUMN IF NOT EXISTS logical_name TEXT;
+        ALTER TABLE ${schemaName}.metadata_column ALTER COLUMN logical_name TYPE TEXT;
+        ALTER TABLE ${schemaName}.metadata_column ALTER COLUMN data_type TYPE VARCHAR(100);
+
+        UPDATE ${schemaName}.metadata_column 
+        SET logical_name = description, description = '' 
+        WHERE (logical_name IS NULL OR logical_name = '') 
+          AND (description IS NOT NULL AND description != '');
 
         -- Upgrade domain table for new columns
         ALTER TABLE ${schemaName}.domain ADD COLUMN IF NOT EXISTS enactment_order VARCHAR(50);

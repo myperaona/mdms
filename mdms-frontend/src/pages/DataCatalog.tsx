@@ -25,6 +25,7 @@ export default function DataCatalog() {
   const [editingTableDesc, setEditingTableDesc] = useState(false);
   const [tableDescText, setTableDescText] = useState('');
   const [editingColId, setEditingColId] = useState<string | null>(null);
+  const [colLogicalNameText, setColLogicalNameText] = useState('');
   const [colDescText, setColDescText] = useState('');
   const [colNameText, setColNameText] = useState('');
   const [colDataTypeText, setColDataTypeText] = useState('');
@@ -144,6 +145,7 @@ export default function DataCatalog() {
       const payload = {
         ...col,
         name: colNameText,
+        logicalName: colLogicalNameText,
         dataType: colDataTypeText,
         nullable: colNullableCheck,
         dataLength: parsedLen,
@@ -156,7 +158,7 @@ export default function DataCatalog() {
         body: JSON.stringify(payload)
       });
 
-      setColumns(columns.map(c => c.id === colId ? { ...c, name: colNameText, dataType: colDataTypeText, nullable: colNullableCheck, dataLength: parsedLen, precision: parsedPrec, description: colDescText } : c));
+      setColumns(columns.map(c => c.id === colId ? { ...c, name: colNameText, logicalName: colLogicalNameText, dataType: colDataTypeText, nullable: colNullableCheck, dataLength: parsedLen, precision: parsedPrec, description: colDescText } : c));
       setEditingColId(null);
     } catch (e: any) {
       alert(e.message || 'Failed to update column metadata');
@@ -168,13 +170,19 @@ export default function DataCatalog() {
     if (!termId) return;
     const term = standardTerms.find(t => t.id === termId);
     if (term) {
-      setColNameText(term.physicalName);
-      setColDescText(term.logicalName);
+      if (term.physicalName) setColNameText(term.physicalName.toUpperCase());
+      setColLogicalNameText(term.logicalName || term.description || '');
+      setColDescText(term.description && term.description.trim() !== (term.logicalName || '').trim() ? term.description : '');
+
+      if (term.storageFormat && term.storageFormat.trim()) {
+        setColDataTypeText(term.storageFormat);
+      }
       
       if (term.wordIds) {
+        const rawIds = typeof term.wordIds === 'string' ? term.wordIds.split(',').map((s: string) => s.trim()).filter(Boolean) : term.wordIds;
         request('/standardization/terms/assemble', {
           method: 'POST',
-          body: term.wordIds.split(',')
+          body: JSON.stringify(rawIds)
         }).then(preview => {
           if (preview) {
             if (preview.dataType) setColDataTypeText(preview.dataType);
@@ -377,7 +385,7 @@ export default function DataCatalog() {
 
                   {/* Business Description Editor */}
                   <div style={{ marginTop: '0.75rem' }}>
-                    <span className="form-label" style={{ fontSize: '0.75rem' }}>{locale === 'ko' ? '테이블 설명 및 비즈니스 명세' : 'Business Description / Documentation'}</span>
+                    <span className="form-label" style={{ fontSize: '0.75rem' }}>{locale === 'ko' ? '테이블 설명 및 비즈니스 명세 (코멘트)' : 'Business Description / Comment'}</span>
                     {editingTableDesc ? (
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                         <input
@@ -452,7 +460,7 @@ export default function DataCatalog() {
                 {activeTab === 'columns' && (
                   <div>
                     <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <FileCode2 size={18} style={{ color: 'var(--color-accent)' }} /> {locale === 'ko' ? '기술 컬럼 속성 명세' : 'Technical Column Definitions'}
+                      <FileCode2 size={18} style={{ color: 'var(--color-accent)' }} /> {locale === 'ko' ? '업무 및 기술 컬럼 속성 명세' : 'Technical & Business Column Definitions'}
                     </h3>
                     <div className="table-wrapper">
                       <table>
@@ -460,12 +468,13 @@ export default function DataCatalog() {
                           <tr>
                             <th style={{ width: '60px' }}>{locale === 'ko' ? '식별 키' : 'Keys'}</th>
                             <th>{t('colName')}</th>
+                            <th>{locale === 'ko' ? '업무 용어' : 'Business Term'}</th>
                             <th>{t('colType')}</th>
                             <th>{locale === 'ko' ? '데이터 길이' : 'Length'}</th>
                             <th>{locale === 'ko' ? 'Precision' : 'Precision'}</th>
                             <th>{t('colNull')}</th>
                             <th>{t('colRef')}</th>
-                            <th>{t('colDesc')}</th>
+                            <th>{locale === 'ko' ? '한글 설명' : 'Korean Description'}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -490,6 +499,22 @@ export default function DataCatalog() {
                                     style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '100%' }}
                                   />
                                 ) : c.name}
+                              </td>
+                              <td>
+                                {editingColId === c.id ? (
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={colLogicalNameText}
+                                    onChange={(e) => setColLogicalNameText(e.target.value)}
+                                    placeholder={locale === 'ko' ? '업무 용어 (논리명)' : 'Business Term'}
+                                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', width: '100%' }}
+                                  />
+                                ) : (
+                                  <span style={{ fontWeight: 600, color: c.logicalName ? 'var(--color-accent)' : 'var(--text-muted)' }}>
+                                    {c.logicalName || '-'}
+                                  </span>
+                                )}
                               </td>
                               <td>
                                 {editingColId === c.id ? (
@@ -571,7 +596,7 @@ export default function DataCatalog() {
                                         className="form-control"
                                         value={colDescText}
                                         onChange={(e) => setColDescText(e.target.value)}
-                                        placeholder={locale === 'ko' ? '컬럼 사전 정의를 기술하세요' : 'Column definition'}
+                                        placeholder={locale === 'ko' ? '한글 설명을 입력하세요' : 'Korean description'}
                                         style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', flex: 1 }}
                                       />
                                       <button onClick={() => handleSaveColumn(c.id)} className="btn btn-accent" style={{ padding: '0.4rem' }}><Check size={14} /></button>
@@ -592,14 +617,26 @@ export default function DataCatalog() {
                                 ) : (
                                   <div
                                     onClick={() => {
-                                      setColNameText(c.name || '');
-                                      setColDataTypeText(c.dataType || '');
-                                      setColDataLengthText(c.dataLength != null ? String(c.dataLength) : '');
-                                      setColPrecisionText(c.precision != null ? String(c.precision) : '');
-                                      setColNullableCheck(c.nullable ?? c.isNullable ?? true);
-                                      setColDescText(c.description || '');
-                                      setSelectedTermId('');
-                                      setEditingColId(c.id);
+                                       const nameVal = c.name || '';
+                                       const logicalVal = c.logicalName || '';
+                                       const descVal = c.description || '';
+                                       
+                                       const matchedTerm = standardTerms.find(t =>
+                                         (t.physicalName && nameVal && t.physicalName.trim().toUpperCase() === nameVal.trim().toUpperCase()) ||
+                                         (t.logicalName && logicalVal && t.logicalName.trim().toUpperCase() === logicalVal.trim().toUpperCase()) ||
+                                         (t.logicalName && descVal && t.logicalName.trim().toUpperCase() === descVal.trim().toUpperCase())
+                                       );
+
+                                       const displayDesc = (descVal && descVal.trim() !== logicalVal.trim()) ? descVal : '';
+                                       setColNameText(nameVal);
+                                       setColLogicalNameText(logicalVal || (matchedTerm ? matchedTerm.logicalName : ''));
+                                       setColDataTypeText(c.dataType || (matchedTerm && matchedTerm.storageFormat ? matchedTerm.storageFormat : ''));
+                                       setColDataLengthText(c.dataLength != null ? String(c.dataLength) : '');
+                                       setColPrecisionText(c.precision != null ? String(c.precision) : '');
+                                       setColNullableCheck(c.nullable ?? c.isNullable ?? true);
+                                       setColDescText(displayDesc || (matchedTerm && matchedTerm.description && matchedTerm.description !== matchedTerm.logicalName ? matchedTerm.description : ''));
+                                       setSelectedTermId(matchedTerm ? matchedTerm.id : '');
+                                       setEditingColId(c.id);
                                     }}
                                     style={{
                                       display: 'flex',
@@ -607,10 +644,10 @@ export default function DataCatalog() {
                                       gap: '0.5rem',
                                       cursor: 'pointer',
                                       fontSize: '0.9rem',
-                                      color: c.description ? 'var(--text-primary)' : 'var(--text-muted)'
+                                      color: (c.description && c.description.trim() !== (c.logicalName || '').trim()) ? 'var(--text-primary)' : 'var(--text-muted)'
                                     }}
                                   >
-                                    <span style={{ flex: 1 }}>{c.description || t('addDetails')}</span>
+                                    <span style={{ flex: 1 }}>{(c.description && c.description.trim() !== (c.logicalName || '').trim()) ? c.description : (locale === 'ko' ? '한글 설명을 추가하세요...' : t('addDetails'))}</span>
                                     <Edit2 size={12} style={{ opacity: 0.5 }} />
                                   </div>
                                 )}

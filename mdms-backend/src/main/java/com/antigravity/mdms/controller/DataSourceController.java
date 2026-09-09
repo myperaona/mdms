@@ -20,11 +20,24 @@ public class DataSourceController {
         this.dataSourceService = dataSourceService;
     }
 
+    private void maskDataSourceSensitiveInfo(DataSource ds) {
+        if (ds == null) return;
+        ds.setPasswordEncrypted(null); // Never return password
+        if (ds.getHost() != null && ds.getHost().contains(".")) {
+            String[] parts = ds.getHost().split("\\.");
+            if (parts.length == 4) {
+                ds.setHost(parts[0] + "." + parts[1] + ".*.*");
+            } else {
+                ds.setHost("***.***.***.***");
+            }
+        }
+    }
+
     @GetMapping
     public List<DataSource> getAll() {
         List<DataSource> list = dataSourceService.getAllDataSources();
         for (DataSource ds : list) {
-            ds.setPasswordEncrypted(null); // Clear password hash before returning payload
+            maskDataSourceSensitiveInfo(ds);
         }
         return list;
     }
@@ -35,7 +48,7 @@ public class DataSourceController {
         if (ds == null) {
             return ResponseEntity.notFound().build();
         }
-        ds.setPasswordEncrypted(null);
+        maskDataSourceSensitiveInfo(ds);
         return ResponseEntity.ok(ds);
     }
 

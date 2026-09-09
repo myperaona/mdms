@@ -7,6 +7,7 @@ public class MetadataColumn {
     private UUID id;
     private UUID tableId;
     private String name;
+    private String logicalName;
     private String dataType;
     private boolean nullable;
     private boolean primaryKey;
@@ -27,6 +28,9 @@ public class MetadataColumn {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getLogicalName() { return logicalName; }
+    public void setLogicalName(String logicalName) { this.logicalName = logicalName; }
 
     public String getDataType() { return dataType; }
     public void setDataType(String dataType) { this.dataType = dataType; }

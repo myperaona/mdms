@@ -49,7 +49,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/tenant/register").permitAll()
-                .requestMatchers("/api/auth/mfa/verify", "/api/auth/mfa/setup").hasAnyRole("PRE_AUTH_MFA", "USER")
+                .requestMatchers("/api/auth/mfa/verify", "/api/auth/mfa/setup", "/api/auth/mfa/confirm").hasAnyRole("PRE_AUTH_MFA", "USER")
                 .requestMatchers("/api/**").hasRole("USER")
                 .anyRequest().permitAll()
             )
@@ -61,7 +61,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*", "http://14.35.198.50:*", "https://*.domain.com"));
+        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*", "http://14.35.198.50:*", "https://*.domain.com", "https://renewal-heather-architects-towers.trycloudflare.com", "https://*.trycloudflare.com"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "X-Tenant-Id"));
         configuration.setAllowCredentials(true);

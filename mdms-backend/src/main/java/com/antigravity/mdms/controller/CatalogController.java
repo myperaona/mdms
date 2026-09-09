@@ -30,6 +30,7 @@ public class CatalogController {
     @PutMapping("/columns/{columnId}")
     public ResponseEntity<?> updateColumn(@PathVariable UUID columnId, @RequestBody MetadataColumn column) {
         try {
+            standardizationService.validateForbiddenWords(column.getLogicalName(), column.getName());
             standardizationService.validateForbiddenWords(column.getDescription(), column.getName());
             column.setId(columnId);
             catalogService.updateColumn(column);
